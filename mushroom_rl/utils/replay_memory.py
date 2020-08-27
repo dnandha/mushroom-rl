@@ -345,3 +345,115 @@ class PrioritizedReplayMemory(object):
 
         """
         return self._tree.max_p if self.initialized else 1.
+
+
+class RecurrentReplayMemory(object):
+    """
+    This class implements function to manage a replay memory as the one used in
+    "Deep Recurrent Q-Learning for Partially Observable MDPs" by Hausknecht, M. et al..
+
+    """
+    def __init__(self, initial_size, max_size, min_length):
+        """
+        Constructor.
+
+        Args:
+            initial_size (int): initial number of elements in the replay memory;
+            max_size (int): maximum number of elements that the replay memory
+                can contain.
+            min_length (int): number of elements an episode must contain to be
+                stored.
+
+        """
+        self._initial_size = initial_size
+        self._max_size = max_size
+        self.min_length = min_length
+
+        self.reset()
+
+    def add(self, dataset):
+        """
+        Add episode to the replay memory.
+
+        Args:
+            dataset (list): episode to add to the replay memory.
+
+        Returns:
+            A boolean that indicates whether the episode has been added
+                successfully
+
+        """
+        # only store if the episode is long enough
+        if len(dataset) >= self.min_length:
+            self._states[self._idx] = dataset[0]
+            self._actions[self._idx] = dataset[1]
+            self._rewards[self._idx] = dataset[2]
+            self._next_states[self._idx] = dataset[3]
+            self._absorbing[self._idx] = dataset[4]
+            self._last[self._idx] = dataset[5]
+
+            self._idx += 1
+            if self._idx == self._max_size:
+                self._full = True
+                self._idx = 0
+
+            return True
+        return False
+
+    def get(self, n_samples):
+        """
+        Returns the provided number of states from the replay memory.
+
+        Args:
+            n_samples (int): the number of samples to return.
+
+        Returns:
+            A sampled episode
+            The start index of the sample
+            The end index of the sample
+
+        """
+
+        assert n_samples < self.min_length,\
+            "n_samples should be >= self.min_length"
+
+        i:int = np.random.randint(self.size)
+
+        start = np.random.randint(0, len(self._states[i]) - n_samples)
+        end = start + n_samples
+
+        return self._states[i], self._actions[i], self._rewards[i],\
+               self._next_states[i], self._absorbing[i], self._last[i]
+
+    def reset(self):
+        """
+        Reset the replay memory.
+
+        """
+        self._idx = 0
+        self._full = False
+        self._states = [None for _ in range(self._max_size)]
+        self._actions = [None for _ in range(self._max_size)]
+        self._rewards = [None for _ in range(self._max_size)]
+        self._next_states = [None for _ in range(self._max_size)]
+        self._absorbing = [None for _ in range(self._max_size)]
+        self._last = [None for _ in range(self._max_size)]
+
+    @property
+    def initialized(self):
+        """
+        Returns:
+            Whether the replay memory has reached the number of elements that
+            allows it to be used.
+
+        """
+        return self.size > self._initial_size
+
+    @property
+    def size(self):
+        """
+        Returns:
+            The number of elements contained in the replay memory.
+
+        """
+        return self._idx if not self._full else self._max_size
