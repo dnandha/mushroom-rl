@@ -198,6 +198,12 @@ class RecurrentApproximator:
         if self._dropout:
             self.network.eval()
 
+    """
+    Does the update for one epoch.
+    
+    Args:
+        args: actions, states, start index, end index ?? 
+    """
     def _fit_epoch(self, args, use_weights, kwargs):
 
         # todo do not allow batches
@@ -211,6 +217,7 @@ class RecurrentApproximator:
         #     loss_current.append(self._fit_batch(batch, use_weights, kwargs))
 
         # todo split args in warm up and train
+        # todo do it based on start and end index
         warm_up_args = args[:]
         train_args = args[:]
 

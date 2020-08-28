@@ -222,6 +222,7 @@ class AveragedDQN(DQN):
 
         return np.max(q, axis=1)
 
+
 class DRQN(DQN):
     """
     Deep Recurrent Q-Network algorithm.
