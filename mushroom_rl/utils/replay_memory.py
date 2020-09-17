@@ -350,10 +350,12 @@ class PrioritizedReplayMemory(object):
 class RecurrentReplayMemory(object):
     """
     This class implements function to manage a replay memory as the one used in
-    "Deep Recurrent Q-Learning for Partially Observable MDPs" by Hausknecht, M. et al..
+    "Deep Recurrent Q-Learning for Partially Observable MDPs"
+    by Hausknecht, M. et al..
 
     """
-    def __init__(self, initial_size, max_size, min_length):
+    def __init__(self, initial_size, max_size, min_length,
+                 sequential_updates=False):
         """
         Constructor.
 
@@ -363,43 +365,83 @@ class RecurrentReplayMemory(object):
                 can contain.
             min_length (int): number of elements an episode must contain to be
                 stored.
+            sequential_updates (bool): if True whole episodes are sampled
+                (corresponds to Sequential updates in the paper) otherwise
+                random parts of the episode will be sampled
 
         """
         self._initial_size = initial_size
         self._max_size = max_size
-        self.min_length = min_length
+        self._min_length = min_length
+        self._sequential_updates = sequential_updates
 
-        self.reset()
+        self._size = 0
+        self._states = list()
+        self._actions = list()
+        self._rewards = list()
+        self._next_states = list()
+        self._absorbing = list()
+        self._last = list()
 
     def add(self, dataset):
         """
-        Add episode to the replay memory.
+        Add episodes to the replay memory.
 
         Args:
             dataset (list): episode to add to the replay memory.
 
         Returns:
-            A boolean that indicates whether the episode has been added
-                successfully
+            Number of episodes that have been added
 
         """
-        # only store if the episode is long enough
-        if len(dataset) >= self.min_length:
-            self._states[self._idx] = dataset[0]
-            self._actions[self._idx] = dataset[1]
-            self._rewards[self._idx] = dataset[2]
-            self._next_states[self._idx] = dataset[3]
-            self._absorbing[self._idx] = dataset[4]
-            self._last[self._idx] = dataset[5]
+        # split dataset into episodes
+        episodes = self._split_dataset(dataset)
 
-            self._idx += 1
-            if self._idx == self._max_size:
-                self._full = True
-                self._idx = 0
+        added = 0
+        # add every episode one by one
+        for episode in episodes:
 
-            return True
-        return False
+            # only store if the episode is long enough but not too long
+            if self._min_length <= len(episode) < self._max_size:
 
+                s = list()
+                a = list()
+                r = list()
+                ss = list()
+                ab = list()
+                last = list()
+
+                for i in range(len(episode)):
+                    s.append(dataset[i][0])
+                    a.append(dataset[i][1])
+                    r.append(dataset[i][2])
+                    ss.append(dataset[i][3])
+                    ab.append(dataset[i][4])
+                    last.append(dataset[i][5])
+
+                # add episode to replay buffer
+                self._states.append(np.asarray(s))
+                self._actions.append(np.asarray(a))
+                self._rewards.append(np.asarray(r))
+                self._next_states.append(np.asarray(ss))
+                self._absorbing.append(np.asarray(ab))
+                self._last.append(np.asarray(last))
+
+                self._size += len(episode)
+                while self._size > self._max_size:
+                    # remove oldest episode
+                    self._size -= len(self._states.pop(0))
+                    self._actions.pop(0)
+                    self._rewards.pop(0)
+                    self._next_states.pop(0)
+                    self._absorbing.pop(0)
+                    self._last.pop(0)
+
+                added += 1
+
+        return added
+
+    # todo batches??
     def get(self, n_samples):
         """
         Returns the provided number of states from the replay memory.
@@ -408,36 +450,34 @@ class RecurrentReplayMemory(object):
             n_samples (int): the number of samples to return.
 
         Returns:
-            A sampled episode
-            The start index of the sample
-            The end index of the sample
+            A list containing the requested number of successive samples or a
+                whole episode if self.sequential_updates is True.
 
         """
+        assert n_samples <= self._min_length,\
+            "n_samples should be <= self.min_length"
 
-        assert n_samples < self.min_length,\
-            "n_samples should be >= self.min_length"
+        # pick random episode
+        i: int = np.random.randint(len(self._states))
 
-        i:int = np.random.randint(self.size)
+        start = 0
+        end = len(self._states[i])
 
-        start = np.random.randint(0, len(self._states[i]) - n_samples)
-        end = start + n_samples
+        if not self._sequential_updates:
+            start = np.random.randint(0, end - n_samples + 1)
+            end = start + n_samples
 
-        return self._states[i], self._actions[i], self._rewards[i],\
-               self._next_states[i], self._absorbing[i], self._last[i]
+        return self._states[i][start:end], self._actions[i][start:end],\
+               self._rewards[i][start:end], self._next_states[i][start:end],\
+               self._absorbing[i][start:end], self._last[i][start:end]
 
     def reset(self):
         """
         Reset the replay memory.
 
         """
-        self._idx = 0
-        self._full = False
-        self._states = [None for _ in range(self._max_size)]
-        self._actions = [None for _ in range(self._max_size)]
-        self._rewards = [None for _ in range(self._max_size)]
-        self._next_states = [None for _ in range(self._max_size)]
-        self._absorbing = [None for _ in range(self._max_size)]
-        self._last = [None for _ in range(self._max_size)]
+        self._size = 0
+        self._episodes = []
 
     @property
     def initialized(self):
@@ -447,7 +487,7 @@ class RecurrentReplayMemory(object):
             allows it to be used.
 
         """
-        return self.size > self._initial_size
+        return self._size > self._initial_size
 
     @property
     def size(self):
@@ -456,4 +496,23 @@ class RecurrentReplayMemory(object):
             The number of elements contained in the replay memory.
 
         """
-        return self._idx if not self._full else self._max_size
+        return self._size
+
+    @staticmethod
+    def _split_dataset(dataset):
+        """
+        Returns:
+            A list of the episodes in the dataset
+
+        """
+        # split data into episodes based on absorbing flag
+        indices = np.where(np.array(dataset, dtype=object)[:, -2])[0].tolist()
+
+        # calculate start and end values from indices
+        args = (0,) + tuple(data + 1 for data in indices) + (len(dataset) + 1,)
+
+        episodes = []
+        for start, end in zip(args, args[1:]):
+            episodes.append(dataset[start:end])
+
+        return episodes

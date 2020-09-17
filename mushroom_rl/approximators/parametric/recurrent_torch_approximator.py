@@ -14,15 +14,17 @@ class RecurrentApproximator:
     This class supports also minibatches.
 
     """
-    def __init__(self, input_shape, output_shape, network, optimizer=None,
-                 loss=None, batch_size=0, n_fit_targets=1, use_cuda=False,
-                 reinitialize=False, dropout=False, quiet=True, **params):
+    def __init__(self, input_shape, output_shape, latent_dims, network,
+                 optimizer=None, loss=None, batch_size=0, n_fit_targets=1,
+                 use_cuda=False, reinitialize=False, dropout=False, quiet=True,
+                 **params):
         """
         Constructor.
 
         Args:
             input_shape (tuple): shape of the input of the network;
             output_shape (tuple): shape of the output of the network;
+            latent_dims (list): list of shapes of hidden states;
             network (torch.nn.Module): the network class to use;
             optimizer (dict): the optimizer used for every fit step;
             loss (torch.nn.functional): the loss function to optimize in the
@@ -51,8 +53,12 @@ class RecurrentApproximator:
         self._quiet = quiet
         self._n_fit_targets = n_fit_targets
 
-        self.network = network(input_shape, output_shape, use_cuda=use_cuda,
+        self.network = network(input_shape, output_shape, latent_dims, use_cuda=use_cuda,
                                dropout=dropout, **params)
+
+        self.latent_dims = latent_dims
+        self.latent = None
+        self.reset_latent()
 
         if self._use_cuda:
             self.network.cuda()
@@ -79,10 +85,19 @@ class RecurrentApproximator:
             The predictions of the model.
 
         """
+
+        if "reset_latent" in kwargs and kwargs["reset_latent"]:
+            self.reset_latent()
+
+        kwargs["latent"] = self.latent
+
         if not self._use_cuda:
-            torch_args = [torch.from_numpy(x) if isinstance(x, np.ndarray) else x
-                          for x in args]
-            val = self.network.forward(*torch_args, **kwargs)
+
+            torch_args = torch.from_numpy(*args).unsqueeze(1)
+
+            val, self.latent = self.network.forward(torch_args, **kwargs)
+
+            val = val.squeeze(1)
 
             if output_tensor:
                 return val
@@ -91,10 +106,12 @@ class RecurrentApproximator:
             else:
                 val = val.detach().numpy()
         else:
-            torch_args = [torch.from_numpy(x).cuda()
-                          if isinstance(x, np.ndarray) else x.cuda() for x in args]
-            val = self.network.forward(*torch_args,
-                                       **kwargs)
+
+            torch_args = torch.from_numpy(*args).unsqueeze(1).cuda()
+
+            val, self.latent = self.network.forward(torch_args, **kwargs)
+
+            val = val.squeeze(1)
 
             if output_tensor:
                 return val
@@ -111,7 +128,7 @@ class RecurrentApproximator:
         Fit the model.
 
         Args:
-            *args (list): input -> [states, actions, q/targets, start, end];
+            *args (list): input -> [states, actions, q/targets];
             n_epochs (int, None): the number of training epochs;
             weights (np.ndarray, None): the weights of each sample in the
                 computation of the loss;
@@ -124,9 +141,6 @@ class RecurrentApproximator:
                 regressor.
 
         """
-
-        # todo check validation parameter and where to put start/stop
-        # kwargs???
 
         if self._reinitialize:
             self.network.weights_init()
@@ -198,45 +212,21 @@ class RecurrentApproximator:
         if self._dropout:
             self.network.eval()
 
-    """
-    Does the update for one epoch.
-    
-    Args:
-        args: actions, states, start index, end index ?? 
-    """
+        self.reset_latent()
+
     def _fit_epoch(self, args, use_weights, kwargs):
 
-        # todo do not allow batches
-        # if self._batch_size > 0:
-        #     batches = minibatch_generator(self._batch_size, *args)
-        # else:
-        #     batches = [args]
-        #
-        # loss_current = list()
-        # for batch in batches:
-        #     loss_current.append(self._fit_batch(batch, use_weights, kwargs))
-
-        # todo split args in warm up and train
-        # todo do it based on start and end index
-        warm_up_args = args[:]
-        train_args = args[:]
-
-        # todo warm up net/reset latent state
-        # todo reset loss and gradient
-        self.network.warm_up(warm_up_args)
-
-        # todo sequentially process state action pairs
-        loss_current = list()
-        for sample in train_args:
-            loss_current.append(self._fit_batch(sample, use_weights, kwargs))
-
-        return np.mean(loss_current)
+        return self._fit_batch(args, use_weights, kwargs)
 
     """
     Just fits a single sample in the recurrent case since the latent state has
         has to be carried around
     """
+    # todo (truncated) backpropagation through time
     def _fit_batch(self, batch, use_weights, kwargs):
+
+        kwargs["latent"] = None
+
         loss = self._compute_batch_loss(batch, use_weights, kwargs)
 
         self._optimizer.zero_grad()
@@ -260,15 +250,18 @@ class RecurrentApproximator:
 
         x = torch_args[:-self._n_fit_targets]
 
-        y_hat = self.network(*x, **kwargs)
+        # reshape to seq_length x batch_size (1) x input_length
+        x[0] = x[0].unsqueeze(1)
+
+        y_hat, self.latent = self.network(*x, **kwargs)
 
         if isinstance(y_hat, tuple):
             output_type = y_hat[0].dtype
         else:
             output_type = y_hat.dtype
 
-        y = [y_i.clone().detach().requires_grad_(False).type(output_type) for y_i
-             in torch_args[-self._n_fit_targets:]]
+        y = [y_i.clone().detach().requires_grad_(False).type(output_type) for
+             y_i in torch_args[-self._n_fit_targets:]]
 
         if self._use_cuda:
             y = [y_i.cuda() for y_i in y]
@@ -352,6 +345,9 @@ class RecurrentApproximator:
         g = np.stack(gradients, -1)
 
         return g
+
+    def reset_latent(self):
+        self.latent = None
 
     @property
     def use_cuda(self):

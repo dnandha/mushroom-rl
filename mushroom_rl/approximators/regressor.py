@@ -83,7 +83,7 @@ class Regressor:
         Fit the model.
 
         Args:
-            *z (list): list of input of the model;
+            *z (np.ndarray): list of input of the model;
             **fit_params (dict): parameters to use to fit the model.
 
         """
@@ -98,7 +98,7 @@ class Regressor:
         Predict the output of the model given an input.
 
         Args:
-            *z (list): list of input of the model;
+            *z (np.ndarray): list of input of the model;
             **predict_params(dict): parameters to use to predict with the model.
 
         Returns:
