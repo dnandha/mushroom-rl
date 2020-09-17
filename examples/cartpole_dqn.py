@@ -15,11 +15,10 @@ from mushroom_rl.algorithms.value import DRQN, DQN
 
 
 class Network(nn.Module):
-    def __init__(self, input_shape, output_shape, latent_dims, **kwargs):
+    def __init__(self, input_shape, output_shape, **kwargs):
         super().__init__()
 
-        # n_input = input_shape[-1]
-        n_input = 1
+        n_input = input_shape[-1]
         self.n_output = output_shape[0]
 
         h = [24, 24]
@@ -39,8 +38,7 @@ class Network(nn.Module):
 
     def forward(self, state, action=None, **kwargs):
 
-        # q = state.float()
-        q = state[:, :1].float()
+        q = state.float()
         q = self._h1(q)
         q = F.relu(q)
         q = F.relu(self._h2(q))
@@ -61,7 +59,6 @@ def experiment():
     mdp = CartPole()
 
     # Policy
-    epsilon_random = LinearParameter(value=1., threshold_value=.1, n=100)
     epsilon_random = Parameter(.2)
     pi = EpsGreedy(epsilon=epsilon_random)
 
@@ -72,10 +69,9 @@ def experiment():
                                           'params': {'lr': .001}},
                                loss=F.mse_loss,
                                input_shape=input_shape,
-                               latent_dims=[24],
                                output_shape=mdp.info.action_space.size,
                                n_actions=mdp.info.action_space.n,
-                               n_features=2, use_cuda=False)
+                               use_cuda=False)
 
     # Agent
     params = dict(batch_size=50,
@@ -90,24 +86,20 @@ def experiment():
     # Algorithm
     core = Core(agent, mdp)
 
-    # core.evaluate(n_episodes=3, render=True)
-    dataset = []
+    core.evaluate(n_episodes=3, render=True)
 
-    for i in range(1):
-        # Train
-        core.learn(n_episodes=12000, n_episodes_per_fit=10)
+    # Train
+    core.learn(n_episodes=12000, n_episodes_per_fit=10)
 
-        # Test
-        test_epsilon = Parameter(0.)
-        agent.policy.set_epsilon(test_epsilon)
+    # Test
+    test_epsilon = Parameter(0.)
+    agent.policy.set_epsilon(test_epsilon)
 
-        d = np.mean(episodes_length(core.evaluate(n_episodes=3)))
-        dataset.append(d)
-        print(d)
+    dataset = core.evaluate(n_episodes=3)
 
-    # core.evaluate(n_steps=10, render=True)
-    return np.mean(dataset)
-    # return np.mean(episodes_length(dataset))
+    core.evaluate(n_steps=10, render=True)
+
+    return np.mean(episodes_length(dataset))
 
 
 if __name__ == '__main__':
