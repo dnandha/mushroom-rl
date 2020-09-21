@@ -1,16 +1,14 @@
 import torch
 import numpy as np
 from tqdm import trange, tqdm
-
-from mushroom_rl.utils.minibatches import minibatch_generator
 from mushroom_rl.utils.torch import get_weights, set_weights, zero_grad
 
 
 class RecurrentApproximator:
     """
     Class to interface a pytorch model to the mushroom Regressor interface.
-    This class implements all is needed to use a generic pytorch model and train
-    it using a specified optimizer and objective function.
+    This class implements all is needed to use a generic pytorch model and
+    train it using a specified optimizer and objective function.
     This class supports also minibatches.
 
     """
@@ -53,8 +51,8 @@ class RecurrentApproximator:
         self._quiet = quiet
         self._n_fit_targets = n_fit_targets
 
-        self.network = network(input_shape, output_shape, latent_dims, use_cuda=use_cuda,
-                               dropout=dropout, **params)
+        self.network = network(input_shape, output_shape, latent_dims,
+                               use_cuda=use_cuda, dropout=dropout, **params)
 
         self.latent_dims = latent_dims
         self.latent = None
@@ -177,7 +175,8 @@ class RecurrentApproximator:
                       dynamic_ncols=True, disable=self._quiet,
                       leave=False) as t_epochs:
                 while patience_count < patience and epochs_count < n_epochs:
-                    mean_loss_current = self._fit_epoch(train_args, use_weights,
+                    mean_loss_current = self._fit_epoch(train_args,
+                                                        use_weights,
                                                         kwargs)
 
                     if len(val_args[0]):
@@ -203,7 +202,8 @@ class RecurrentApproximator:
         else:
             with trange(n_epochs, disable=self._quiet) as t_epochs:
                 for _ in t_epochs:
-                    mean_loss_current = self._fit_epoch(train_args, use_weights,
+                    mean_loss_current = self._fit_epoch(train_args,
+                                                        use_weights,
                                                         kwargs)
 
                     if not self._quiet:
@@ -222,7 +222,6 @@ class RecurrentApproximator:
     Just fits a single sample in the recurrent case since the latent state has
         has to be carried around
     """
-    # todo (truncated) backpropagation through time
     def _fit_batch(self, batch, use_weights, kwargs):
 
         kwargs["latent"] = None
@@ -235,7 +234,6 @@ class RecurrentApproximator:
 
         return loss.item()
 
-    # todo do fit of recurrent network!
     def _compute_batch_loss(self, batch, use_weights, kwargs):
         if use_weights:
             weights = torch.from_numpy(batch[-1]).type(torch.float)
@@ -280,7 +278,7 @@ class RecurrentApproximator:
         Setter.
 
         Args:
-            w (np.ndarray): the set of weights to set.
+            weights (numpy.ndarray): the set of weights to set.
 
         """
         set_weights(self.network.parameters(), weights, self._use_cuda)
@@ -310,8 +308,9 @@ class RecurrentApproximator:
         if provided.
 
         Args:
-            state (np.ndarray): the state;
-            action (np.ndarray, None): the action.
+            args:
+                state (np.ndarray): the state;
+                action (np.ndarray, None): the action.
 
         Returns:
             The derivative of the output w.r.t. ``state``, and ``action``

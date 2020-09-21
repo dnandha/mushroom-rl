@@ -9,9 +9,9 @@ from mushroom_rl.core import Core
 from mushroom_rl.environments import *
 from mushroom_rl.policy import EpsGreedy
 from mushroom_rl.utils.dataset import episodes_length
-from mushroom_rl.utils.parameters import Parameter, LinearParameter
-from mushroom_rl.approximators.parametric import TorchApproximator, RecurrentApproximator
-from mushroom_rl.algorithms.value import DRQN, DQN
+from mushroom_rl.utils.parameters import Parameter
+from mushroom_rl.approximators.parametric import TorchApproximator
+from mushroom_rl.algorithms.value import DQN
 
 
 class Network(nn.Module):
@@ -106,4 +106,4 @@ if __name__ == '__main__':
     n_experiment = 1
 
     steps = experiment()
-    print('Final episode lenght: ', steps)
+    print('Final episode length: ', steps)

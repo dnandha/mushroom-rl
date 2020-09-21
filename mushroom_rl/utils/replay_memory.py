@@ -477,7 +477,12 @@ class RecurrentReplayMemory(object):
 
         """
         self._size = 0
-        self._episodes = []
+        self._states = list()
+        self._actions = list()
+        self._rewards = list()
+        self._next_states = list()
+        self._absorbing = list()
+        self._last = list()
 
     @property
     def initialized(self):
