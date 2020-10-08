@@ -267,4 +267,12 @@ class DRQN(DQN):
 
             self.approximator.fit(state, action, q, **self._fit_params)
 
-        print(np.array(dataset)[:, 0])
+    def episode_start(self):
+        super().episode_start()
+        self.approximator.model.reset_latent()
+
+    # it's necessary to update the reference here since it's off after the
+    # loading which prevents the reset of the latent state
+    def _post_load(self):
+        self.policy.set_q(self.approximator)
+
