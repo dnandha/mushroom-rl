@@ -8,3 +8,5 @@ logs/
 *.h5
 .pytest_cache
 .coverage*
+*.c
+*.so

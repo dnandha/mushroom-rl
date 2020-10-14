@@ -1,14 +1,17 @@
 import gym
+from gym import spaces as gym_spaces
 
 try:
     import pybullet_envs
     import time
+    pybullet_found = True
 except ImportError:
-    pass
+    pybullet_found = False
 
-from gym import spaces as gym_spaces
 from mushroom_rl.environments import Environment, MDPInfo
 from mushroom_rl.utils.spaces import *
+
+gym.logger.set_level(40)
 
 
 class Gym(Environment):
@@ -18,24 +21,25 @@ class Gym(Environment):
     are managed in a separate class.
 
     """
-    def __init__(self, name, horizon, gamma):
+    def __init__(self, name, horizon, gamma, **env_args):
         """
         Constructor.
 
         Args:
              name (str): gym id of the environment;
              horizon (int): the horizon;
-             gamma (float): the discount factor.
+             gamma (float): the discount factor;
+             **env_args: other gym environment parameters.
 
         """
         # MDP creation
         self._close_at_stop = True
-        if '- ' + name in pybullet_envs.getList():
+        if pybullet_found and '- ' + name in pybullet_envs.getList():
             import pybullet
             pybullet.connect(pybullet.DIRECT)
             self._close_at_stop = False
 
-        self.env = gym.make(name)
+        self.env = gym.make(name, **env_args)
 
         self.env._max_episode_steps = np.inf  # Hack to ignore gym time limit.
 
@@ -57,17 +61,18 @@ class Gym(Environment):
 
     def reset(self, state=None):
         if state is None:
-            return self.env.reset()
+            return np.atleast_1d(self.env.reset())
         else:
             self.env.reset()
             self.env.state = state
 
-            return state
+            return np.atleast_1d(state)
 
     def step(self, action):
         action = self._convert_action(action)
+        obs, reward, absorbing, info = self.env.step(action)
 
-        return self.env.step(action)
+        return np.atleast_1d(obs), reward, absorbing, info
 
     def render(self, mode='human'):
         self.env.render(mode=mode)

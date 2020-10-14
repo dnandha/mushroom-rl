@@ -51,6 +51,14 @@ You can install everything by running:
     pip3 install mushroom_rl[all]
 
 This will install every dependency of MushroomRL, except MuJoCo and Plots dependencies.
+For ubuntu>20.04, you may need to install pygame and gym dependencies:
+
+.. code:: shell
+
+    sudo apt -y install libsdl-image1.2-dev libsdl-mixer1.2-dev libsdl-ttf2.0-dev \
+                     libsdl1.2-dev libsmpeg-dev libportmidi-dev ffmpeg libswscale-dev \
+                     libavformat-dev libavcodec-dev swig
+
 To use the ``mujoco-py`` MushroomRL interface you can run the command:
 
 .. code:: shell
@@ -61,7 +69,7 @@ Below is the code that you need to run to install the Plots dependencies:
 
 .. code:: shell
 
-    sudo apt-get -y install python3-pyqt5
+    sudo apt -y install python3-pyqt5
     pip3 install mushroom_rl[plots]
 
 You might need to install external dependencies first. For more information about mujoco-py
@@ -69,6 +77,13 @@ installation follow the instructions on the `project page <https://github.com/op
 
 To use dm_control MushroomRL interface, install ``dm_control`` following the instruction that can
 be found `here <https://github.com/deepmind/dm_control>`_
+
+You can also perform a local editable installation by using:
+
+.. code:: shell
+
+    pip install --no-use-pep517 -e .
+
 
 How to set and run and experiment
 =================================
@@ -96,3 +111,8 @@ If you are using mushroom for your scientific publications, please cite:
          howpublished={\url{https://github.com/MushroomRL/mushroom-rl}}
    }
 
+How to contact us
+=================
+For any question, drop an e-mail at mushroom4rl@gmail.com.
+
+Follow us on Twitter `@Mushroom_RL <https://twitter.com/mushroom_rl>`_!

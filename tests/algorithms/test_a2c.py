@@ -1,17 +1,9 @@
-# import sys
-# import os
-# sys.path = [os.getcwd()] + sys.path
-
-# import sys
-# print('\n'.join(sys.path))
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 
 import numpy as np
-import shutil
 from datetime import datetime
 from helper.utils import TestUtils as tu
 
@@ -37,6 +29,7 @@ class Network(nn.Module):
 
     def forward(self, state):
         return F.relu(self._h(torch.squeeze(state, 1).float()))
+
 
 def learn_a2c():
     mdp = Gym(name='Pendulum-v0', horizon=200, gamma=.99)
@@ -84,26 +77,24 @@ def test_a2c():
     agent = learn_a2c()
 
     w = agent.policy.get_weights()
-    w_test = np.array([-1.6307759, 1.0356185, -0.34508315, 0.27108294,
-                       -0.01047843])
+    w_test = np.array([-1.6298926, 1.0359657, -0.34826356, 0.26997435,
+                       -0.00908627])
 
     assert np.allclose(w, w_test)
 
 
-def test_a2c_save():
-
-    agent_path = './agentdir{}/'.format(datetime.now().strftime("%H%M%S%f"))
+def test_a2c_save(tmpdir):
+    agent_path = tmpdir / 'agent_{}'.format(datetime.now().strftime("%H%M%S%f"))
 
     agent_save = learn_a2c()
 
-    agent_save.save(agent_path)
+    agent_save.save(agent_path, full_save=True)
     agent_load = Agent.load(agent_path)
 
-    shutil.rmtree(agent_path)
-
-    for att, method in agent_save.__dict__.items():
+    for att, method in vars(agent_save).items():
         save_attr = getattr(agent_save, att)
         load_attr = getattr(agent_load, att)
-        #print('{}: {}'.format(att, type(save_attr)))
+        print('checking ', att)
+        print(save_attr, load_attr)
 
         tu.assert_eq(save_attr, load_attr)

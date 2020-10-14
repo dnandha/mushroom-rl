@@ -52,7 +52,7 @@ class TRPO(Agent):
                 of the critic approximator.
 
         """
-        self._critic_fit_params = dict(n_epochs=3) if critic_fit_params is None else critic_fit_params
+        self._critic_fit_params = dict(n_epochs=5) if critic_fit_params is None else critic_fit_params
 
         self._n_epochs_line_search = n_epochs_line_search
         self._n_epochs_cg = n_epochs_cg
@@ -73,17 +73,17 @@ class TRPO(Agent):
 
         self._add_save_attr(
             _critic_fit_params='pickle', 
-            _n_epochs_line_search='numpy',
-            _n_epochs_cg='numpy',
-            _cg_damping='numpy',
-            _cg_residual_tol='numpy',
-            _max_kl='numpy',
-            _ent_coeff='numpy',
-            _lambda='numpy',
-            _V='pickle',
-            _old_policy='pickle',
-            _iter='numpy',
-            _quiet='numpy'
+            _n_epochs_line_search='primitive',
+            _n_epochs_cg='primitive',
+            _cg_damping='primitive',
+            _cg_residual_tol='primitive',
+            _max_kl='primitive',
+            _ent_coeff='primitive',
+            _lambda='primitive',
+            _V='mushroom',
+            _old_policy='mushroom',
+            _iter='primitive',
+            _quiet='primitive'
         )
 
         super().__init__(mdp_info, policy, None)
@@ -191,7 +191,7 @@ class TRPO(Agent):
             new_loss = self._compute_loss(obs, act, adv, old_log_prob)
             kl = self._compute_kl(obs, old_pol_dist)
             improve = new_loss - prev_loss
-            if kl <= self._max_kl * 1.5 or improve >= 0:
+            if kl <= self._max_kl * 1.5 and improve >= 0:
                 violation = False
                 break
             stepsize *= .5
