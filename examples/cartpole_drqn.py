@@ -1,5 +1,5 @@
+import pathlib
 import numpy as np
-from joblib import Parallel, delayed
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -12,6 +12,11 @@ from mushroom_rl.utils.dataset import episodes_length
 from mushroom_rl.utils.parameters import Parameter, LinearParameter
 from mushroom_rl.approximators.parametric import RecurrentApproximator
 from mushroom_rl.algorithms.value import DRQN
+
+import matplotlib.pyplot as plt
+from mushroom_rl.algorithms import Agent
+
+
 
 
 class Network(nn.Module):
@@ -37,27 +42,37 @@ class Network(nn.Module):
             latent = None
 
         # limit observability
-        q = state[:, :, :self._n_input].float()
-
+        q = state.unsqueeze(1)[:, :, :self._n_input].float()
         q, latent = self._h1(q, latent)
-        q = self._h2(q)
+        q = self._h2(q.squeeze(1))
 
         if action is None:
             return q, latent
         else:
             action = action.long()
-            q_acted = torch.squeeze(q.squeeze(1).gather(1, action))
+            q_acted = torch.squeeze(q.gather(1, action))
 
             return q_acted, latent
 
 
-def experiment(n_experiments):
+def experiment():
+    # Parameters
+    folder_name = str(pathlib.Path.home()) + "/logs/DRQN/"
+    training_episodes = 1#00
+    evaluation_frequency = 1000
+    max_steps = training_episodes * evaluation_frequency
+    eval_episodes = 10
+    np.random.seed(0)
+    angle = np.random.uniform(-np.pi / 8., np.pi / 8., (eval_episodes, 1))
+    states = np.concatenate((angle, np.zeros_like(angle)), axis=1)
+
     # MDP
     mdp = CartPole()
 
     # Policy
-    epsilon_random = LinearParameter(value=1., threshold_value=.1, n=80000)
-    pi = EpsGreedy(epsilon=epsilon_random)
+    epsilon = LinearParameter(value=1., threshold_value=.1, n=80000)
+    epsilon_test = Parameter(value=0.0)
+    pi = EpsGreedy(epsilon=epsilon)
 
     # Approximator
     approximator_params = dict(network=Network,
@@ -81,34 +96,59 @@ def experiment(n_experiments):
                  approximator_params=approximator_params,
                  sequential_updates=False, **params)
 
-    # reset latent state after every episode
-    def callback(x):
-        if x[0][-1]:
-            agent.approximator.model.reset_latent()
-
     # Algorithm
-    core = Core(agent, mdp, callback_step=callback)
+    core = Core(agent, mdp)
 
-    # core.evaluate(n_episodes=3, render=True)
+    pathlib.Path(folder_name).mkdir(parents=True, exist_ok=True)
 
-    dataset = []
-    for i in range(n_experiments):
-        # Train
-        core.learn(n_episodes=10000000, n_episodes_per_fit=20)
+    scores = []
+    pi.set_epsilon(epsilon_test)
+    dataset = core.evaluate(n_episodes=10, quiet=True)
+    scores.append(episodes_length(dataset))
 
-        # Test
-        test_epsilon = Parameter(0.)
-        agent.policy.set_epsilon(test_epsilon)
+    for n_epoch in range(1, max_steps // evaluation_frequency + 1):
+        print('##############################################################')
+        print('Epoch: ', n_epoch)
+        print('--------------------------------------------------------------')
+        print('- Learning:')
+        # learning step
+        pi.set_epsilon(epsilon)
+        core.learn(n_episodes=evaluation_frequency, n_episodes_per_fit=20,
+                   quiet=True)
 
-        d = np.mean(episodes_length(core.evaluate(n_episodes=3)))
-        dataset.append(d)
+        agent.save(folder_name + '/agent_' + str(n_epoch) + '.msh')
 
-    core.evaluate(n_steps=10, render=True)
-    return np.mean(dataset)
+        print('- Evaluation:')
+        # evaluation step
+        pi.set_epsilon(epsilon_test)
+        dataset = core.evaluate(quiet=True, initial_states=states)
+        scores.append(episodes_length(dataset))
+        print("Mean:", np.mean(episodes_length(dataset)))
+
+        np.save(folder_name + '/scores.npy', scores)
+
+    # plot results
+    mean = np.mean(scores, axis=1)
+    std = np.std(scores, axis=1)
+
+    x = np.arange(0, evaluation_frequency * (len(mean)), evaluation_frequency)
+
+    plt.figure()
+    plt.grid(True)
+    plt.title("DRQN Cartpole")
+    plt.xlabel("Episodes", fontsize=7)
+    plt.ylabel("Episode Length", fontsize=7)
+
+    plt.plot(x, mean, '-', color='gray')
+
+    plt.fill_between(x, mean - std, mean + std,
+                     color='gray', alpha=0.2)
+
+    plt.show()
+
+    return scores[-1]
 
 
 if __name__ == '__main__':
-    n_experiment = 1
-
-    steps = experiment(n_experiment)
+    steps = experiment()
     print('Final episode length: ', steps)
