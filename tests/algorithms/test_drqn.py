@@ -2,60 +2,44 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 
-import shutil
-from datetime import datetime
-from helper.utils import TestUtils as tu
-
-from mushroom_rl.algorithms import Agent
 from mushroom_rl.algorithms.value import DRQN
 from mushroom_rl.core import Core
 from mushroom_rl.environments import *
 from mushroom_rl.policy import EpsGreedy
 from mushroom_rl.approximators.parametric.recurrent_torch_approximator import *
-from mushroom_rl.utils.parameters import Parameter, LinearParameter
+from mushroom_rl.utils.parameters import Parameter
 
 
 class Network(nn.Module):
-    def __init__(self, input_shape, output_shape, **kwargs):
+    def __init__(self, input_shape, output_shape, latent_dims, **kwargs):
         super().__init__()
 
-        n_input = input_shape[-1]
-        self.n_output = output_shape[0]
+        self._n_input = input_shape[-1]
+        self._n_output = output_shape[0]
 
-        self._h1 = nn.LSTM(n_input, self.n_output)
+        self._h1 = nn.RNN(self._n_input, self._n_output)
 
-        self.latent = (torch.zeros(self.n_output), torch.zeros(self.n_output))
+        self.float()
 
-        nn.init.xavier_uniform_(self._h1.weight,
-                                gain=nn.init.calculate_gain('relu'))
+    def forward(self, state, action=None, **kwargs):
 
-    def forward(self, state, action=None):
+        if "latent" in kwargs:
+            latent = kwargs["latent"]
+        else:
+            latent = None
 
-        q, self.latent = self._h1(torch.squeeze(state, 1).float(), self.latent)
-        q = F.relu(q)
+        # limit observability
+        q = state.unsqueeze(1)[:, :, :self._n_input].float()
+        q, latent = self._h1(q, latent)
+        q = q.squeeze(1)
 
         if action is None:
-            return q
+            return q, latent
         else:
             action = action.long()
-            q_acted = torch.squeeze(q.gather(1, action))
+            q_acted = torch.squeeze(q.squeeze(1).gather(1, action))
 
-            return q_acted
-
-    def warm_up(self, states, actions):
-        assert len(states) == len(actions), "Length of inputs does not match!"
-
-        # reset latent state to zeros at the beginning of the episode
-        self.latent = self.latent = (torch.zeros(self.n_output),
-                                     torch.zeros(self.n_output))
-
-        # go through all states to create initial latent state for training
-        for i in range(0, len(states)):
-            self.forward(states[i], actions[i])
-
-        # restart gradient here
-        self.latent[0].detach()
-        self.latent[1].detach()
+            return q_acted, latent
 
 
 def learn(alg, alg_params):
@@ -75,10 +59,11 @@ def learn(alg, alg_params):
                                optimizer={'class': optim.Adam,
                                           'params': {'lr': .001}},
                                loss=F.smooth_l1_loss,
-                               input_shape=input_shape,
+                               input_shape=[1],
+                               latent_dims=0,
                                output_shape=mdp.info.action_space.size,
                                n_actions=mdp.info.action_space.n,
-                               n_features=2, use_cuda=False)
+                               use_cuda=False)
 
     # Agent
     agent = alg(mdp.info, pi, RecurrentApproximator,
@@ -87,23 +72,21 @@ def learn(alg, alg_params):
     # Algorithm
     core = Core(agent, mdp)
 
-    core.learn(n_steps=500, n_steps_per_fit=5)
+    core.learn(n_steps=1, n_steps_per_fit=1)
 
     return agent
 
 
 def test_drqn():
-    params = dict(batch_size=1, n_approximators=1, initial_replay_size=50,
+    params = dict(batch_size=1, n_approximators=1, initial_replay_size=1,
                   max_replay_size=500, target_update_frequency=50)
     approximator = learn(DRQN, params).approximator
 
     w = approximator.get_weights()
-    # w_test = np.array([-0.15894288, 0.47257397, 0.05482405, 0.5442066,
-    #                    -0.56469935, -0.07374532, -0.0706185, 0.40790945,
-    #                    0.12486243])
-    #
-    # assert np.allclose(w, w_test)
+    w_test = np.array([0.29748732, -0.25482982, -0.11192599, 0.27099025,
+                       -0.5435388, 0.3462469, -0.11877558, 0.2937234,
+                       0.08026147, -0.07069314, 0.16013438, 0.02848172,
+                       0.2108646, -0.22499397, -0.04209387, -0.05197728,
+                       0.08368343, -0.0023064])
 
-
-if __name__ == '__main__':
-    test_drqn()
+    assert np.allclose(w, w_test)
