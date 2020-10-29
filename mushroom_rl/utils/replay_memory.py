@@ -420,12 +420,12 @@ class RecurrentReplayMemory(object):
                     last.append(dataset[i][5])
 
                 # add episode to replay buffer
-                self._states.append(np.asarray(s))
-                self._actions.append(np.asarray(a))
-                self._rewards.append(np.asarray(r))
-                self._next_states.append(np.asarray(ss))
-                self._absorbing.append(np.asarray(ab))
-                self._last.append(np.asarray(last))
+                self._states.append(s)
+                self._actions.append(a)
+                self._rewards.append(r)
+                self._next_states.append(ss)
+                self._absorbing.append(ab)
+                self._last.append(last)
 
                 self._size += len(episode)
                 while self._size > self._max_size:
@@ -457,19 +457,33 @@ class RecurrentReplayMemory(object):
         assert n_samples <= self._min_length,\
             "n_samples should be <= self.min_length"
 
+        s = list()
+        a = list()
+        r = list()
+        ss = list()
+        ab = list()
+        last = list()
+
         # pick random episode
-        i: int = np.random.randint(len(self._states))
+        ep: int = np.random.randint(len(self._states))
 
         start = 0
-        end = len(self._states[i])
+        end = len(self._states[ep])
 
         if not self._sequential_updates:
             start = np.random.randint(0, end - n_samples + 1)
             end = start + n_samples
 
-        return self._states[i][start:end], self._actions[i][start:end],\
-               self._rewards[i][start:end], self._next_states[i][start:end],\
-               self._absorbing[i][start:end], self._last[i][start:end]
+        for i in range(start, end):
+            s.append(np.array(self._states[ep][i]))
+            a.append(self._actions[ep][i])
+            r.append(self._rewards[ep][i])
+            ss.append(np.array(self._next_states[ep][i]))
+            ab.append(self._absorbing[ep][i])
+            last.append(self._last[ep][i])
+
+        return np.array(s), np.array(a), np.array(r), np.array(ss),\
+            np.array(ab), np.array(last)
 
     def reset(self):
         """

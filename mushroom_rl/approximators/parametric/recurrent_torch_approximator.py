@@ -91,11 +91,9 @@ class RecurrentApproximator:
 
         if not self._use_cuda:
 
-            torch_args = torch.from_numpy(*args).unsqueeze(1)
+            torch_args = torch.from_numpy(*args)
 
             val, self.latent = self.network.forward(torch_args, **kwargs)
-
-            val = val.squeeze(1)
 
             if output_tensor:
                 return val
@@ -247,9 +245,6 @@ class RecurrentApproximator:
             torch_args = [torch.from_numpy(x).cuda() for x in batch]
 
         x = torch_args[:-self._n_fit_targets]
-
-        # reshape to seq_length x batch_size (1) x input_length
-        x[0] = x[0].unsqueeze(1)
 
         y_hat, self.latent = self.network(*x, **kwargs)
 
