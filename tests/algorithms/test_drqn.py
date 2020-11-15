@@ -17,7 +17,8 @@ class Network(nn.Module):
         self._n_input = input_shape[-1]
         self._n_output = output_shape[0]
 
-        self._h1 = nn.RNN(self._n_input, self._n_output)
+        self._h1 = nn.RNN(self._n_input, self._n_output,
+                          nonlinearity='relu', bias=False)
 
         self.float()
 
@@ -45,7 +46,7 @@ class Network(nn.Module):
 def learn(alg, alg_params):
     # MDP
     mdp = CartPole()
-    np.random.seed(1)
+    np.random.seed(17)
     torch.manual_seed(1)
     torch.cuda.manual_seed(1)
 
@@ -56,9 +57,9 @@ def learn(alg, alg_params):
     # Approximator
     input_shape = mdp.info.observation_space.shape
     approximator_params = dict(network=Network,
-                               optimizer={'class': optim.Adam,
-                                          'params': {'lr': .001}},
-                               loss=F.smooth_l1_loss,
+                               optimizer={'class': optim.SGD,
+                                          'params': {'lr': 1.}},
+                               loss=F.mse_loss,
                                input_shape=[1],
                                latent_dims=0,
                                output_shape=mdp.info.action_space.size,
@@ -72,21 +73,20 @@ def learn(alg, alg_params):
     # Algorithm
     core = Core(agent, mdp)
 
-    core.learn(n_steps=1, n_steps_per_fit=1)
+    core.learn(n_steps=3, n_steps_per_fit=3, quiet=True)
 
     return agent
 
 
 def test_drqn():
-    params = dict(batch_size=1, n_approximators=1, initial_replay_size=1,
+    params = dict(batch_size=2, n_approximators=1, initial_replay_size=2,
                   max_replay_size=500, target_update_frequency=50)
     approximator = learn(DRQN, params).approximator
 
     w = approximator.get_weights()
-    w_test = np.array([0.29748732, -0.25482982, -0.11192599, 0.27099025,
-                       -0.5435388, 0.3462469, -0.11877558, 0.2937234,
-                       0.08026147, -0.07069314, 0.16013438, 0.02848172,
-                       0.2108646, -0.22499397, -0.04209387, -0.05197728,
-                       0.08368343, -0.0023064])
+    w_test = np.array([0.29748732, -0.26594713, -0.11243464,
+                       0.27099025, -0.5435388, 0.3462469,
+                       -0.11877558, 0.29533836, 0.08097079,
+                       -0.07069314, 0.16013438, 0.02848172])
 
     assert np.allclose(w, w_test)
