@@ -15,7 +15,7 @@ from mushroom_rl.algorithms.value import DQN
 
 
 class Network(nn.Module):
-    def __init__(self, input_shape, output_shape, **kwargs):
+    def __init__(self, input_shape, output_shape, **_):
         super().__init__()
 
         n_input = input_shape[-1]
@@ -78,7 +78,7 @@ def experiment():
                   n_approximators=1,
                   initial_replay_size=200,
                   max_replay_size=1000,
-                  target_update_frequency=2)
+                  target_update_frequency=100)
 
     agent = DQN(mdp.info, pi, TorchApproximator,
                 approximator_params=approximator_params, **params)
@@ -89,7 +89,7 @@ def experiment():
     core.evaluate(n_episodes=3, render=True)
 
     # Train
-    core.learn(n_episodes=12000, n_episodes_per_fit=10)
+    core.learn(n_episodes=1000, n_steps_per_fit=1)
 
     # Test
     test_epsilon = Parameter(0.)
