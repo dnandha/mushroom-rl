@@ -1,3 +1,5 @@
+import numpy as np
+import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
@@ -6,7 +8,7 @@ from mushroom_rl.algorithms.value import DRQN
 from mushroom_rl.core import Core
 from mushroom_rl.environments import *
 from mushroom_rl.policy import EpsGreedy
-from mushroom_rl.approximators.parametric.recurrent_torch_approximator import *
+from mushroom_rl.approximators.parametric import TorchApproximator
 from mushroom_rl.utils.parameters import Parameter
 
 
@@ -18,29 +20,28 @@ class Network(nn.Module):
         self._n_output = output_shape[0]
 
         self._h1 = nn.RNN(self._n_input, self._n_output,
-                          nonlinearity='relu', bias=False)
+                          nonlinearity='relu', bias=False,
+                          batch_first=True)
 
         self.float()
+        self.latent = None
 
     def forward(self, state, action=None, **kwargs):
 
-        if "latent" in kwargs:
-            latent = kwargs["latent"]
-        else:
-            latent = None
-
         # limit observability
-        q = state.unsqueeze(1)[:, :, :self._n_input].float()
-        q, latent = self._h1(q, latent)
-        q = q.squeeze(1)
+        q = state[:, :, :self._n_input].float()
+        q, self.latent = self._h1(q, self.latent)
 
         if action is None:
-            return q, latent
+            return q
         else:
             action = action.long()
-            q_acted = torch.squeeze(q.squeeze(1).gather(1, action))
+            q_acted = q.gather(-1, action).squeeze(-1)
 
-            return q_acted, latent
+            return q_acted
+
+    def reset_latent(self):
+        self.latent = None
 
 
 def learn(alg, alg_params):
@@ -48,7 +49,6 @@ def learn(alg, alg_params):
     mdp = CartPole()
     np.random.seed(17)
     torch.manual_seed(1)
-    torch.cuda.manual_seed(1)
 
     # Policy
     epsilon_random = Parameter(value=1.)
@@ -67,7 +67,7 @@ def learn(alg, alg_params):
                                use_cuda=False)
 
     # Agent
-    agent = alg(mdp.info, pi, RecurrentApproximator,
+    agent = alg(mdp.info, pi, TorchApproximator,
                 approximator_params=approximator_params, **alg_params)
 
     # Algorithm
@@ -79,8 +79,9 @@ def learn(alg, alg_params):
 
 
 def test_drqn():
-    params = dict(batch_size=2, n_approximators=1, initial_replay_size=2,
-                  max_replay_size=500, target_update_frequency=50)
+    params = dict(batch_size=1, n_approximators=1, initial_replay_size=2,
+                  unroll_steps=2, max_replay_size=500,
+                  target_update_frequency=50)
     approximator = learn(DRQN, params).approximator
 
     w = approximator.get_weights()
