@@ -1,12 +1,7 @@
-import json
-import torch
-import pickle
-import numpy as np
-from copy import deepcopy
-from pathlib import Path, PurePath
+from mushroom_rl.core import Serializable
 
 
-class Agent(object):
+class Agent(Serializable):
     """
     This class implements the functions to manage the agent (e.g. move the agent
     following its policy).
@@ -32,7 +27,7 @@ class Agent(object):
 
         self._add_save_attr(
             mdp_info='pickle',
-            policy='pickle',
+            policy='mushroom',
             phi='pickle',
             next_action='numpy'
         )
@@ -86,147 +81,3 @@ class Agent(object):
 
         """
         pass
-
-    @classmethod
-    def load(cls, path):
-        """
-        Load and deserialize the agent from the given location on disk.
-
-        Args:
-            path (string): Relative or absolute path to the agents save
-                location.
-
-        Returns:
-            The loaded agent.
-
-        """
-        if not isinstance(path, str): 
-            raise ValueError('path has to be of type string')
-        if not Path(path).is_dir():
-            raise NotADirectoryError("Path to load agent is not valid")
-
-        agent_type, save_attributes = cls._load_pickle(
-            PurePath(path, 'agent.config')).values()
-
-        agent = agent_type.__new__(agent_type)
-
-        for att, method in save_attributes.items():
-            load_path = Path(path, '{}.{}'.format(att, method))
-            
-            if load_path.is_file():
-                load_method = getattr(cls, '_load_{}'.format(method))
-                if load_method is None:
-                    raise NotImplementedError('Method _load_{} is not'
-                                              'implemented'.format(method))
-                att_val = load_method(load_path.resolve())
-                setattr(agent, att, att_val)
-            else:
-                setattr(agent, att, None)
-
-        agent._post_load()
-
-        return agent
-
-    def save(self, path):
-        """
-        Serialize and save the agent to the given path on disk.
-
-        Args:
-            path (string): Relative or absolute path to the agents save
-                location.
-
-        """
-        if not isinstance(path, str):
-            raise ValueError('path has to be of type string')
-
-        path_obj = Path(path)
-        path_obj.mkdir(parents=True, exist_ok=True)
-
-        # Save algorithm type and save_attributes
-        agent_config = dict(
-            type=type(self),
-            save_attributes=self._save_attributes
-        )
-        self._save_pickle(PurePath(path, 'agent.config'), agent_config)
-
-        for att, method in self._save_attributes.items():
-            attribute = getattr(self, att) if hasattr(self, att) else None
-            save_method = getattr(self, '_save_{}'.format(method)) if hasattr(
-                self, '_save_{}'.format(method)) else None
-            if attribute is None:
-                continue
-            elif save_method is None:
-                raise NotImplementedError(
-                    "Method _save_{} is not implemented for class '{}'".format(
-                        method, self.__class__.__name__)
-                )
-            else:
-                save_method(PurePath(path, "{}.{}".format(att, method)),
-                            attribute)
-
-    def copy(self):
-        """
-        Returns:
-             A deepcopy of the agent.
-
-        """
-        return deepcopy(self)
-
-    def _add_save_attr(self, **attr_dict):
-        """
-        Add attributes that should be saved for an agent.
-
-        Args:
-            attr_dict (dict): dictionary of attributes mapped to the method that
-                should be used to save and load them.
-
-        """
-        if not hasattr(self, '_save_attributes'):
-            self._save_attributes = dict(_save_attributes='json')
-        self._save_attributes.update(attr_dict)
-
-    def _post_load(self):
-        """
-        This method can be overwritten to implement logic that is executed after
-        the loading of the agent.
-
-        """
-        pass
-
-    @staticmethod
-    def _load_pickle(path):
-        with Path(path).open('rb') as f:
-            return pickle.load(f)
-    
-    @staticmethod
-    def _load_numpy(path):
-        with Path(path).open('rb') as f:
-            return np.load(f)
-    
-    @staticmethod
-    def _load_torch(path):
-        return torch.load(path)
-    
-    @staticmethod
-    def _load_json(path):
-        with Path(path).open('r') as f:
-            return json.load(f)
-
-    @staticmethod
-    def _save_pickle(path, obj):
-        with Path(path).open('wb') as f:
-            pickle.dump(obj, f, protocol=pickle.HIGHEST_PROTOCOL)
-    
-    @staticmethod
-    def _save_numpy(path, obj):
-        with Path(path).open('wb') as f:
-            np.save(f, obj)
-    
-    @staticmethod
-    def _save_torch(path, obj):
-        torch.save(obj, path)
-    
-    @staticmethod
-    def _save_json(path, obj):
-        with Path(path).open('w') as f:
-            json.dump(obj, f)

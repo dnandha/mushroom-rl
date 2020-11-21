@@ -347,6 +347,7 @@ class PrioritizedReplayMemory(object):
         return self._tree.max_p if self.initialized else 1.
 
 
+# todo sequential updates
 class RecurrentReplayMemory(object):
     """
     This class implements function to manage a replay memory as the one used in
@@ -354,17 +355,17 @@ class RecurrentReplayMemory(object):
     by Hausknecht, M. et al..
 
     """
-    def __init__(self, initial_size, max_size, min_length,
+    def __init__(self, initial_size, max_size, unroll_steps,
                  sequential_updates=False):
         """
         Constructor.
 
         Args:
-            initial_size (int): initial number of elements in the replay memory;
+            initial_size (int): initial number of elements in the replay memory
             max_size (int): maximum number of elements that the replay memory
                 can contain.
-            min_length (int): number of elements an episode must contain to be
-                stored.
+            unroll_steps (int): number of elements per sample; also the minimum
+                length for an episode to be stored.
             sequential_updates (bool): if True whole episodes are sampled
                 (corresponds to Sequential updates in the paper) otherwise
                 random parts of the episode will be sampled
@@ -372,8 +373,9 @@ class RecurrentReplayMemory(object):
         """
         self._initial_size = initial_size
         self._max_size = max_size
-        self._min_length = min_length
-        self._sequential_updates = sequential_updates
+        self._unroll_steps = unroll_steps
+        # todo
+        self._sequential_updates = sequential_updates and False
 
         self._size = 0
         self._states = list()
@@ -402,7 +404,7 @@ class RecurrentReplayMemory(object):
         for episode in episodes:
 
             # only store if the episode is long enough but not too long
-            if self._min_length <= len(episode) < self._max_size:
+            if self._unroll_steps <= len(episode) < self._max_size:
 
                 s = list()
                 a = list()
@@ -441,21 +443,20 @@ class RecurrentReplayMemory(object):
 
         return added
 
-    # todo batches??
     def get(self, n_samples):
         """
-        Returns the provided number of states from the replay memory.
+        Returns the provided number of samples from the replay memory.
 
         Args:
             n_samples (int): the number of samples to return.
 
         Returns:
-            A list containing the requested number of successive samples or a
-                whole episode if self.sequential_updates is True.
+            The samples as n_samples x unroll_steps x sample shape
+                todo or a whole episode if self.sequential_updates is True.
 
         """
-        assert n_samples <= self._min_length,\
-            "n_samples should be <= self.min_length"
+        assert n_samples <= self._initial_size,\
+            "n_samples should be smaller than the initial size"
 
         s = list()
         a = list()
@@ -464,23 +465,37 @@ class RecurrentReplayMemory(object):
         ab = list()
         last = list()
 
-        # pick random episode
-        ep: int = np.random.randint(len(self._states))
+        for ep in np.random.randint(len(self._states), size=n_samples):
+            ep_len = len(self._last[ep])
+            start = np.random.randint(0, ep_len - self._unroll_steps + 1)
+            end = start + self._unroll_steps
 
-        start = 0
-        end = len(self._states[ep])
+            s_ep = list()
+            a_ep = list()
+            r_ep = list()
+            ss_ep = list()
+            ab_ep = list()
+            last_ep = list()
 
-        if not self._sequential_updates:
-            start = np.random.randint(0, end - n_samples + 1)
-            end = start + n_samples
+            for i in range(start, end):
+                s_ep.append(np.array(self._states[ep][i]))
+                a_ep.append(self._actions[ep][i])
+                r_ep.append(self._rewards[ep][i])
+                ss_ep.append(np.array(self._next_states[ep][i]))
+                ab_ep.append(self._absorbing[ep][i])
+                last_ep.append(self._last[ep][i])
 
-        for i in range(start, end):
-            s.append(np.array(self._states[ep][i]))
-            a.append(self._actions[ep][i])
-            r.append(self._rewards[ep][i])
-            ss.append(np.array(self._next_states[ep][i]))
-            ab.append(self._absorbing[ep][i])
-            last.append(self._last[ep][i])
+            s.append(np.array(s_ep))
+            a.append(np.array(a_ep))
+            r.append(np.array(r_ep))
+            ss.append(np.array(ss_ep))
+            ab.append(np.array(ab_ep))
+            last.append(np.array(last_ep))
+
+        if self._unroll_steps == 1:
+            return np.array(s).squeeze(1), np.array(a).squeeze(1),\
+                   np.array(r).squeeze(1), np.array(ss).squeeze(1),\
+                   np.array(ab).squeeze(1), np.array(last).squeeze(1)
 
         return np.array(s), np.array(a), np.array(r), np.array(ss),\
             np.array(ab), np.array(last)

@@ -10,61 +10,59 @@ from mushroom_rl.environments import *
 from mushroom_rl.policy import EpsGreedy
 from mushroom_rl.utils.dataset import episodes_length
 from mushroom_rl.utils.parameters import Parameter, LinearParameter
-from mushroom_rl.approximators.parametric import RecurrentApproximator
+from mushroom_rl.approximators.parametric import TorchApproximator
 from mushroom_rl.algorithms.value import DRQN
 
 import matplotlib.pyplot as plt
 from mushroom_rl.algorithms import Agent
 
 
-
-
 class Network(nn.Module):
-    def __init__(self, input_shape, output_shape, latent_dims, **kwargs):
+    def __init__(self, input_shape, output_shape, latent_dims, **_):
         super().__init__()
 
         self._n_input = input_shape[-1]
         self._n_output = output_shape[0]
 
-        self._h1 = nn.GRU(self._n_input, latent_dims, num_layers=2)
+        self._h1 = nn.GRU(self._n_input, latent_dims, num_layers=2,
+                          batch_first=True)
         self._h2 = nn.Linear(latent_dims, self._n_output)
 
         nn.init.xavier_uniform_(self._h2.weight,
                                 gain=nn.init.calculate_gain('linear'))
 
         self.float()
+        self.latent = None
 
-    def forward(self, state, action=None, **kwargs):
+    def forward(self, state, action=None, reset_latent=False, **kwargs):
 
-        if "latent" in kwargs:
-            latent = kwargs["latent"]
-        else:
-            latent = None
+        if reset_latent:
+            self.reset_latent()
 
         # limit observability
-        q = state.unsqueeze(1)[:, :, :self._n_input].float()
-        q, latent = self._h1(q, latent)
-        q = self._h2(q.squeeze(1))
+        q = state[:, :, :self._n_input].float()
+        q, self.latent = self._h1(q, self.latent)
+        q = self._h2(q)
 
         if action is None:
-            return q, latent
+            return q
         else:
             action = action.long()
-            q_acted = torch.squeeze(q.gather(1, action))
+            q_acted = torch.squeeze(q.gather(-1, action), -1)
 
-            return q_acted, latent
+            return q_acted
+
+    def reset_latent(self):
+        self.latent = None
 
 
 def experiment():
     # Parameters
     folder_name = str(pathlib.Path.home()) + "/logs/DRQN/"
-    training_episodes = 1#00
+    training_episodes = 1
     evaluation_frequency = 1000
-    max_steps = training_episodes * evaluation_frequency
-    eval_episodes = 10
-    np.random.seed(0)
-    angle = np.random.uniform(-np.pi / 8., np.pi / 8., (eval_episodes, 1))
-    states = np.concatenate((angle, np.zeros_like(angle)), axis=1)
+    eval_episodes = 3
+    initial_size = 200
 
     # MDP
     mdp = CartPole()
@@ -72,6 +70,7 @@ def experiment():
     # Policy
     epsilon = LinearParameter(value=1., threshold_value=.1, n=80000)
     epsilon_test = Parameter(value=0.0)
+    epsilon_random = Parameter(value=1.0)
     pi = EpsGreedy(epsilon=epsilon)
 
     # Approximator
@@ -79,20 +78,21 @@ def experiment():
                                optimizer={'class': optim.Adam,
                                           'params': {'lr': .001}},
                                loss=F.mse_loss,
-                               input_shape=[1],
+                               input_shape=[2],
                                latent_dims=10,
                                output_shape=mdp.info.action_space.size,
                                n_actions=mdp.info.action_space.n,
                                use_cuda=False)
 
     # Agent
-    params = dict(batch_size=10,
+    params = dict(batch_size=1,
+                  unroll_steps=10,
                   n_approximators=1,
-                  initial_replay_size=120,
-                  max_replay_size=10000,
-                  target_update_frequency=10)
+                  initial_replay_size=initial_size,
+                  max_replay_size=1000,
+                  target_update_frequency=100)
 
-    agent = DRQN(mdp.info, pi, RecurrentApproximator,
+    agent = DRQN(mdp.info, pi, TorchApproximator,
                  approximator_params=approximator_params,
                  sequential_updates=False, **params)
 
@@ -103,17 +103,20 @@ def experiment():
 
     scores = []
     pi.set_epsilon(epsilon_test)
-    dataset = core.evaluate(n_episodes=10, quiet=True)
+    dataset = core.evaluate(n_episodes=eval_episodes, quiet=True)
     scores.append(episodes_length(dataset))
 
-    for n_epoch in range(1, max_steps // evaluation_frequency + 1):
+    pi.set_epsilon(epsilon_random)
+    core.learn(n_steps=initial_size, n_steps_per_fit=initial_size, quiet=True)
+
+    for n_epoch in range(1, training_episodes + 1):
         print('##############################################################')
         print('Epoch: ', n_epoch)
         print('--------------------------------------------------------------')
         print('- Learning:')
         # learning step
         pi.set_epsilon(epsilon)
-        core.learn(n_episodes=evaluation_frequency, n_episodes_per_fit=20,
+        core.learn(n_episodes=evaluation_frequency, n_steps_per_fit=1,
                    quiet=True)
 
         agent.save(folder_name + '/agent_' + str(n_epoch) + '.msh')
@@ -121,7 +124,7 @@ def experiment():
         print('- Evaluation:')
         # evaluation step
         pi.set_epsilon(epsilon_test)
-        dataset = core.evaluate(quiet=True, initial_states=states)
+        dataset = core.evaluate(n_episodes=eval_episodes, quiet=True)
         scores.append(episodes_length(dataset))
         print("Mean:", np.mean(episodes_length(dataset)))
 

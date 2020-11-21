@@ -84,15 +84,14 @@ class DQN(Agent):
 
         self._add_save_attr(
             _fit_params='pickle',
-            _batch_size='numpy',
-            _n_approximators='numpy',
-            _clip_reward='numpy',
-            _target_update_frequency='numpy',
-            _replay_memory='pickle',
-            _fit='pickle',
-            _n_updates='numpy',
-            approximator='pickle',
-            target_approximator='pickle'
+            _batch_size='primitive',
+            _n_approximators='primitive',
+            _clip_reward='primitive',
+            _target_update_frequency='primitive',
+            _replay_memory='mushroom',
+            _n_updates='primitive',
+            approximator='mushroom',
+            target_approximator='mushroom'
         )
 
         super().__init__(mdp_info, policy)
@@ -145,7 +144,7 @@ class DQN(Agent):
         self.target_approximator.set_weights(
             self.approximator.get_weights())
 
-    def _next_q(self, next_state, absorbing, **kwargs):
+    def _next_q(self, next_state, absorbing):
         """
         Args:
             next_state (np.ndarray): the states where next action has to be
@@ -157,16 +156,26 @@ class DQN(Agent):
             Maximum action-value for each state in ``next_state``.
 
         """
-        q = self.target_approximator.predict(next_state, **kwargs)
+        q = self.target_approximator.predict(next_state)
         if np.any(absorbing):
-            q *= 1 - absorbing.reshape(-1, 1)
+            shape = list(q.shape)
+            shape[-1] = 1
+            q *= 1 - absorbing.reshape(shape)
 
-        return np.max(q, axis=1)
+        return np.max(q, axis=-1)
 
     def draw_action(self, state):
         action = super(DQN, self).draw_action(np.array(state))
 
         return action
+
+    def _post_load(self):
+        if isinstance(self._replay_memory, PrioritizedReplayMemory):
+            self._fit = self._fit_prioritized
+        else:
+            self._fit = self._fit_standard
+
+        self.policy.set_q(self.approximator)
 
 
 class DoubleDQN(DQN):
@@ -199,7 +208,7 @@ class AveragedDQN(DQN):
 
         self._n_fitted_target_models = 1
 
-        self._add_save_attr(_n_fitted_target_models='numpy')
+        self._add_save_attr(_n_fitted_target_models='primitive')
 
         assert len(self.target_approximator) > 1
 
@@ -231,7 +240,7 @@ class DRQN(DQN):
 
     """
     def __init__(self, mdp_info, policy, approximator, approximator_params,
-                 batch_size, target_update_frequency,
+                 batch_size, target_update_frequency, unroll_steps,
                  replay_memory=None, initial_replay_size=500,
                  max_replay_size=5000, fit_params=None, n_approximators=1,
                  clip_reward=True, sequential_updates=False):
@@ -241,7 +250,8 @@ class DRQN(DQN):
                 "replay_buffer should be of type RecurrentReplayMemory."
         else:
             replay_memory = RecurrentReplayMemory(initial_replay_size,
-                                                  max_replay_size, batch_size,
+                                                  max_replay_size,
+                                                  unroll_steps,
                                                   sequential_updates)
 
         super().__init__(mdp_info, policy, approximator,
@@ -250,29 +260,28 @@ class DRQN(DQN):
                          initial_replay_size, max_replay_size,
                          fit_params, n_approximators, clip_reward)
 
-        self._fit = self._fit_recurrent
+    def fit(self, dataset):
+        # reset target latent
+        self.target_approximator.model.network.reset_latent()
 
-    def _fit_recurrent(self, dataset):
-        self._replay_memory.add(dataset)
-        if self._replay_memory.initialized:
-            state, action, reward, next_state, absorbing, _ = \
-                self._replay_memory.get(self._batch_size)
+        # save latent state before resetting it for the fit
+        latent = self.approximator.model.network.latent
+        self.approximator.model.network.reset_latent()
 
-            if self._clip_reward:
-                reward = np.clip(reward, -1, 1)
+        self._fit(dataset)
 
-            q_next = self._next_q(next_state, absorbing,
-                                  **{"reset_latent": True})
-            q = reward + self.mdp_info.gamma * q_next
+        self._n_updates += 1
+        if self._n_updates % self._target_update_frequency == 0:
+            self._update_target()
 
-            self.approximator.fit(state, action, q, **self._fit_params)
+        # set latent back to old value
+        self.approximator.model.network.latent = latent
+
+    def draw_action(self, state):
+        action = super(DRQN, self).draw_action(np.expand_dims(np.array(state),
+                                                              axis=(0, 1)))
+        return action
 
     def episode_start(self):
         super().episode_start()
-        self.approximator.model.reset_latent()
-
-    # it's necessary to update the reference here since it's off after the
-    # loading which prevents the reset of the latent state
-    def _post_load(self):
-        self.policy.set_q(self.approximator)
-
+        self.approximator.model.network.reset_latent()

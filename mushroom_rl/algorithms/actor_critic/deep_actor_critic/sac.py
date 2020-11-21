@@ -50,6 +50,13 @@ class SACPolicy(Policy):
             self._delta_a = self._delta_a.cuda()
             self._central_a = self._central_a.cuda()
 
+        self._add_save_attr(
+            _mu_approximator='mushroom',
+            _sigma_approximator='mushroom',
+            _delta_a='torch',
+            _central_a='torch'
+        )
+
     def __call__(self, state, action):
         raise NotImplementedError
 
@@ -114,6 +121,20 @@ class SACPolicy(Policy):
         mu = self._mu_approximator.predict(state, output_tensor=True)
         log_sigma = self._sigma_approximator.predict(state, output_tensor=True)
         return torch.distributions.Normal(mu, log_sigma.exp())
+
+    def entropy(self, state=None):
+        """
+        Compute the entropy of the policy.
+
+        Args:
+            state (np.ndarray): the set of states to consider.
+
+        Returns:
+            The value of the entropy of the policy.
+
+        """
+
+        return torch.mean(self.distribution(state).entropy()).detach().cpu().numpy().item()
 
     def reset(self):
         pass
@@ -243,15 +264,15 @@ class SAC(DeepAC):
 
         self._add_save_attr(
             _critic_fit_params='pickle',
-            _batch_size='numpy',
-            _warmup_transitions='numpy',
-            _tau='numpy',
-            _target_entropy='numpy',
-            _replay_memory='pickle',
-            _critic_approximator='pickle',
-            _target_critic_approximator='pickle',
-            _log_alpha='pickle',
-            _alpha_optim='pickle'
+            _batch_size='primitive',
+            _warmup_transitions='primitive',
+            _tau='primitive',
+            _target_entropy='primitive',
+            _replay_memory='mushroom',
+            _critic_approximator='mushroom',
+            _target_critic_approximator='mushroom',
+            _log_alpha='torch',
+            _alpha_optim='torch'
         )
 
         super().__init__(mdp_info, policy, actor_optimizer, policy_parameters)

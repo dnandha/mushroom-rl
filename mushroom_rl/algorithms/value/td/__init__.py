@@ -12,6 +12,6 @@ from .sarsa_lambda_continuous import SARSALambdaContinuous
 from .true_online_sarsa_lambda import TrueOnlineSARSALambda
 
 __all__ = ['SARSA', 'SARSALambda', 'ExpectedSARSA', 'QLearning',
-           'DoubleQLearning', 'SpeedyQLearning', 'RLearning',
-           'WeightedQLearning', 'RQLearning', 'SARSALambdaContinuous',
-           'TrueOnlineSARSALambda']
+           'DoubleQLearning', 'SpeedyQLearning',
+           'RLearning', 'WeightedQLearning', 'RQLearning',
+           'SARSALambdaContinuous', 'TrueOnlineSARSALambda']
