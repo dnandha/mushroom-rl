@@ -72,7 +72,7 @@ class TRPO(Agent):
         self._old_policy = None
 
         self._add_save_attr(
-            _critic_fit_params='pickle',
+            _critic_fit_params='pickle', 
             _n_epochs_line_search='primitive',
             _n_epochs_cg='primitive',
             _cg_damping='primitive',

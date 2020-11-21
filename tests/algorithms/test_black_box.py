@@ -1,6 +1,5 @@
 import numpy as np
 import torch
-import shutil
 from datetime import datetime
 from helper.utils import TestUtils as tu
 
@@ -49,18 +48,15 @@ def test_RWR():
     assert np.allclose(w, w_test)
 
 
-def test_RWR_save():
-
-    agent_path = './agentdir{}/'.format(datetime.now().strftime("%H%M%S%f"))
+def test_RWR_save(tmpdir):
+    agent_path = tmpdir / 'agent_{}'.format(datetime.now().strftime("%H%M%S%f"))
 
     agent_save = learn(RWR, beta=1.)
 
     agent_save.save(agent_path)
     agent_load = Agent.load(agent_path)
 
-    shutil.rmtree(agent_path)
-
-    for att, method in agent_save.__dict__.items():
+    for att, method in vars(agent_save).items():
         save_attr = getattr(agent_save, att)
         load_attr = getattr(agent_load, att)
 
@@ -76,18 +72,15 @@ def test_REPS():
     assert np.allclose(w, w_test)
 
 
-def test_REPS_save():
-
-    agent_path = './agentdir{}/'.format(datetime.now().strftime("%H%M%S%f"))
+def test_REPS_save(tmpdir):
+    agent_path = tmpdir / 'agent_{}'.format(datetime.now().strftime("%H%M%S%f"))
 
     agent_save = learn(REPS, eps=.7)
 
     agent_save.save(agent_path)
     agent_load = Agent.load(agent_path)
 
-    shutil.rmtree(agent_path)
-
-    for att, method in agent_save.__dict__.items():
+    for att, method in vars(agent_save).items():
         save_attr = getattr(agent_save, att)
         load_attr = getattr(agent_load, att)
 
@@ -103,18 +96,15 @@ def test_PGPE():
     assert np.allclose(w, w_test)
 
 
-def test_PGPE_save():
-
-    agent_path = './agentdir{}/'.format(datetime.now().strftime("%H%M%S%f"))
+def test_PGPE_save(tmpdir):
+    agent_path = tmpdir / 'agent_{}'.format(datetime.now().strftime("%H%M%S%f"))
 
     agent_save = learn(PGPE, learning_rate=AdaptiveParameter(1.5))
 
     agent_save.save(agent_path)
     agent_load = Agent.load(agent_path)
 
-    shutil.rmtree(agent_path)
-
-    for att, method in agent_save.__dict__.items():
+    for att, method in vars(agent_save).items():
         save_attr = getattr(agent_save, att)
         load_attr = getattr(agent_load, att)
 
