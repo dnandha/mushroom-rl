@@ -31,7 +31,7 @@ class DeepAC(Agent):
             if 'clipping' in actor_optimizer:
                 self._clipping = actor_optimizer['clipping']['method']
                 self._clipping_params = actor_optimizer['clipping']['params']
-        
+
         self._add_save_attr(
             _optimizer='torch',
             _clipping='torch',

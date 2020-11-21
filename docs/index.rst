@@ -63,7 +63,7 @@ Eventually, the **agent** is:
     learning_rate = Parameter(value=.6)
     agent = QLearning(mdp.info, policy, learning_rate)
 
-Learn: 
+Learn:
 
 ::
 
