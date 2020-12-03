@@ -6,7 +6,7 @@ from mushroom_rl.algorithms.agent import Agent
 from mushroom_rl.approximators.parametric.torch_approximator import *
 from mushroom_rl.approximators.regressor import Ensemble, Regressor
 from mushroom_rl.utils.replay_memory import PrioritizedReplayMemory,\
-    ReplayMemory, RecurrentReplayMemory
+    ReplayMemory, SequentialReplayMemory
 
 
 class DQN(Agent):
@@ -246,13 +246,13 @@ class DRQN(DQN):
                  clip_reward=True, sequential_updates=False):
 
         if replay_memory is not None:
-            assert isinstance(replay_memory, RecurrentReplayMemory),\
-                "replay_buffer should be of type RecurrentReplayMemory."
+            assert isinstance(replay_memory, SequentialReplayMemory),\
+                "replay_buffer must be of type SequentialReplayMemory."
         else:
-            replay_memory = RecurrentReplayMemory(initial_replay_size,
-                                                  max_replay_size,
-                                                  unroll_steps,
-                                                  sequential_updates)
+            replay_memory = SequentialReplayMemory(initial_replay_size,
+                                                   max_replay_size,
+                                                   unroll_steps,
+                                                   sequential_updates)
 
         super().__init__(mdp_info, policy, approximator,
                          approximator_params, batch_size,
@@ -268,20 +268,12 @@ class DRQN(DQN):
         latent = self.approximator.model.network.latent
         self.approximator.model.network.reset_latent()
 
-        self._fit(dataset)
-
-        self._n_updates += 1
-        if self._n_updates % self._target_update_frequency == 0:
-            self._update_target()
+        super(DRQN, self).fit(dataset)
 
         # set latent back to old value
         self.approximator.model.network.latent = latent
 
-    def draw_action(self, state):
-        action = super(DRQN, self).draw_action(np.expand_dims(np.array(state),
-                                                              axis=(0, 1)))
-        return action
-
     def episode_start(self):
         super().episode_start()
         self.approximator.model.network.reset_latent()
+        self._replay_memory.unfinished_episode = list()

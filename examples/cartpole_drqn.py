@@ -1,23 +1,19 @@
 import pathlib
-import numpy as np
-import torch
-import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 
 from mushroom_rl.core import Core
 from mushroom_rl.environments import *
-from mushroom_rl.policy import EpsGreedy
 from mushroom_rl.utils.dataset import episodes_length
 from mushroom_rl.utils.parameters import Parameter, LinearParameter
 from mushroom_rl.approximators.parametric import TorchApproximator
 from mushroom_rl.algorithms.value import DRQN
+from mushroom_rl.utils.drqn_utils import *
 
 import matplotlib.pyplot as plt
-from mushroom_rl.algorithms import Agent
 
 
-class Network(nn.Module):
+class Network(MemoryNetwork):
     def __init__(self, input_shape, output_shape, latent_dims, **_):
         super().__init__()
 
@@ -32,25 +28,14 @@ class Network(nn.Module):
                                 gain=nn.init.calculate_gain('linear'))
 
         self.float()
-        self.latent = None
 
-    def forward(self, state, action=None, reset_latent=False, **kwargs):
-
-        if reset_latent:
-            self.reset_latent()
-
-        # limit observability
+    def memory_pass(self, state):
         q = state[:, :, :self._n_input].float()
         q, self.latent = self._h1(q, self.latent)
-        q = self._h2(q)
+        return q
 
-        if action is None:
-            return q
-        else:
-            action = action.long()
-            q_acted = torch.squeeze(q.gather(-1, action), -1)
-
-            return q_acted
+    def _forward(self, hidden):
+        return self._h2(hidden)
 
     def reset_latent(self):
         self.latent = None
@@ -58,8 +43,8 @@ class Network(nn.Module):
 
 def experiment():
     # Parameters
-    folder_name = str(pathlib.Path.home()) + "/logs/DRQN/"
-    training_episodes = 1
+    folder_name = str(pathlib.Path.home()) + "/logs/DRQN/test2/"
+    training_episodes = 100
     evaluation_frequency = 1000
     eval_episodes = 3
     initial_size = 200
@@ -71,26 +56,26 @@ def experiment():
     epsilon = LinearParameter(value=1., threshold_value=.1, n=80000)
     epsilon_test = Parameter(value=0.0)
     epsilon_random = Parameter(value=1.0)
-    pi = EpsGreedy(epsilon=epsilon)
+    pi = MemoryEpsGreedy(epsilon=epsilon)
 
     # Approximator
     approximator_params = dict(network=Network,
                                optimizer={'class': optim.Adam,
                                           'params': {'lr': .001}},
                                loss=F.mse_loss,
-                               input_shape=[2],
+                               input_shape=[1],
                                latent_dims=10,
                                output_shape=mdp.info.action_space.size,
                                n_actions=mdp.info.action_space.n,
                                use_cuda=False)
 
     # Agent
-    params = dict(batch_size=1,
+    params = dict(batch_size=10,
                   unroll_steps=10,
                   n_approximators=1,
                   initial_replay_size=initial_size,
                   max_replay_size=1000,
-                  target_update_frequency=100)
+                  target_update_frequency=1000)
 
     agent = DRQN(mdp.info, pi, TorchApproximator,
                  approximator_params=approximator_params,

@@ -13,7 +13,7 @@ class MemoryNetwork(nn.Module):
     def reset_latent(self):
         pass
 
-    def forward(self, state, action=None, **kwargs):
+    def forward(self, state, action=None, **_):
 
         q = self._forward(self.memory_pass(state))
 
@@ -25,7 +25,7 @@ class MemoryNetwork(nn.Module):
 
             return q_acted
 
-    def memory_pass(self, state):
+    def memory_pass(self, _):
         warnings.warn("Subclass should override memory_pass(self, state)",
                       RuntimeWarning)
         pass
@@ -37,8 +37,10 @@ class MemoryNetwork(nn.Module):
 class MemoryEpsGreedy(EpsGreedy):
 
     def draw_action(self, state):
+        s = np.expand_dims(state, axis=(0, 1))
         if not np.random.uniform() < self._epsilon(state):
-            q = self._approximator.predict(state)
+            q = self._approximator.predict(s)
+            q = q.squeeze().squeeze()
             max_a = np.argwhere(q == np.max(q)).ravel()
 
             if len(max_a) > 1:
@@ -47,6 +49,6 @@ class MemoryEpsGreedy(EpsGreedy):
             return max_a
 
         # update latent memory anyway
-        self._approximator.model.network.memory_pass(state)
+        self._approximator.model.network.memory_pass(torch.from_numpy(s))
 
         return np.array([np.random.choice(self._approximator.n_actions)])
