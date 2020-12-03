@@ -431,16 +431,17 @@ class SequentialReplayMemory(Serializable):
 
         self._add_save_attr(
             _initial_size='primitive',
-            _max_size='pickle',
-            _size='pickle',
-            _unroll_steps='pickle!',
-            _full='pickle!',
-            _states='pickle!',
-            _actions='pickle!',
-            _rewards='pickle!',
-            _next_states='pickle!',
-            _absorbing='pickle!',
-            _last='pickle!'
+            _max_size='primitive',
+            _size='primitive',
+            _unroll_steps='primitive',
+            _full='pickle',
+            _states='pickle',
+            _actions='pickle',
+            _rewards='pickle',
+            _next_states='pickle',
+            _absorbing='pickle',
+            _last='pickle',
+            _lengths='pickle'
         )
 
     def add(self, dataset):
