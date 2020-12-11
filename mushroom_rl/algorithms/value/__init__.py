@@ -2,8 +2,9 @@ from .batch_td import *
 from .dqn import *
 from .td import *
 
-__all__ = ['FQI', 'DoubleFQI', 'LSPI', 'DQN', 'DoubleDQN',
-           'AveragedDQN', 'CategoricalDQN', 'DRQN', 'QLearning',  'QLambda',
-           'DoubleQLearning', 'WeightedQLearning', 'SpeedyQLearning',
-           'RLearning', 'RQLearning', 'SARSA', 'SARSALambda',
-           'SARSALambdaContinuous', 'ExpectedSARSA', 'TrueOnlineSARSALambda']
+__all__ = ['FQI', 'DoubleFQI', 'LSPI', 'AbstractDQN', 'DQN', 'DoubleDQN',
+           'AveragedDQN', 'CategoricalDQN', 'MaxminDQN', 'QLearning', 'QLambda',
+           'DoubleQLearning', 'WeightedQLearning', 'MaxminQLearning',
+           'SpeedyQLearning', 'RLearning', 'RQLearning', 'SARSA', 'SARSALambda',
+           'SARSALambdaContinuous', 'ExpectedSARSA', 'TrueOnlineSARSALambda',
+           'DRQN']
