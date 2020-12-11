@@ -12,7 +12,7 @@ class DRQN(DQN):
     def __init__(self, mdp_info, policy, approximator, approximator_params,
                  batch_size, target_update_frequency, unroll_steps,
                  replay_memory=None, initial_replay_size=500,
-                 max_replay_size=5000, fit_params=None, n_approximators=1,
+                 max_replay_size=5000, fit_params=None,
                  clip_reward=True, sequential_updates=False):
 
         if replay_memory is not None:
@@ -28,7 +28,7 @@ class DRQN(DQN):
                          approximator_params, batch_size,
                          target_update_frequency, replay_memory,
                          initial_replay_size, max_replay_size,
-                         fit_params, n_approximators, clip_reward)
+                         fit_params, clip_reward)
 
     def fit(self, dataset):
         # reset target latent
