@@ -1,3 +1,5 @@
+import numpy as np
+
 from mushroom_rl.algorithms.value.dqn import DQN
 from mushroom_rl.utils.replay_memory import SequentialReplayMemory
 
@@ -13,7 +15,19 @@ class DRQN(DQN):
                  batch_size, target_update_frequency, unroll_steps,
                  replay_memory=None, initial_replay_size=500,
                  max_replay_size=5000, fit_params=None,
-                 clip_reward=True, sequential_updates=False):
+                 clip_reward=True, sequential_updates=False, dummy=None):
+        """
+        Constructor.
+
+        Args:
+            unroll_steps (int): number of serial elements per sample; also the
+                minimum length for an episode to be stored.
+            sequential_updates (bool): if True whole episodes are sampled,
+                therefore, too short episodes will be padded with `dummy`s to
+                always meet the length of `unroll_steps`.
+            dummy (tuple): A dummy sample to be used to pad episodes when using
+                 `sequential_updates`.
+        """
 
         if replay_memory is not None:
             assert isinstance(replay_memory, SequentialReplayMemory),\
@@ -22,13 +36,21 @@ class DRQN(DQN):
             replay_memory = SequentialReplayMemory(initial_replay_size,
                                                    max_replay_size,
                                                    unroll_steps,
-                                                   sequential_updates)
+                                                   sequential_updates,
+                                                   dummy)
 
         super().__init__(mdp_info, policy, approximator,
                          approximator_params, batch_size,
                          target_update_frequency, replay_memory,
                          initial_replay_size, max_replay_size,
                          fit_params, clip_reward)
+
+        # make sure the dummy matches the real data
+        if sequential_updates and\
+                (len(replay_memory.dummy) != 6 or
+                 np.shape(dummy[0]) != mdp_info.observation_space.shape or
+                 np.shape(dummy[3]) != mdp_info.observation_space.shape):
+            raise ValueError('Padding dummy does not match requirements.')
 
     def fit(self, dataset):
         # reset target latent

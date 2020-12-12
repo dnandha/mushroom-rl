@@ -1,5 +1,3 @@
-from select import epoll
-
 import numpy as np
 from mushroom_rl.core import Serializable
 
@@ -10,7 +8,6 @@ class ReplayMemory(Serializable):
     "Human-Level Control Through Deep Reinforcement Learning" by Mnih V. et al..
 
     """
-
     def __init__(self, initial_size, max_size):
         """
         Constructor.
@@ -85,8 +82,8 @@ class ReplayMemory(Serializable):
             ab.append(self._absorbing[i])
             last.append(self._last[i])
 
-        return np.array(s), np.array(a), np.array(r), np.array(ss), \
-               np.array(ab), np.array(last)
+        return np.array(s), np.array(a), np.array(r), np.array(ss),\
+            np.array(ab), np.array(last)
 
     def reset(self):
         """
@@ -132,7 +129,6 @@ class SumTree(object):
     This is used, for instance, by ``PrioritizedReplayMemory``.
 
     """
-
     def __init__(self, max_size):
         """
         Constructor.
@@ -256,7 +252,6 @@ class PrioritizedReplayMemory(Serializable):
     one used in "Prioritized Experience Replay" by Schaul et al., 2015.
 
     """
-
     def __init__(self, initial_size, max_size, alpha, beta, epsilon=.01):
         """
         Constructor.
@@ -331,8 +326,8 @@ class PrioritizedReplayMemory(Serializable):
 
             idxs[i] = idx
             priorities[i] = p
-            states[i], actions[i], rewards[i], next_states[i], absorbing[i], \
-            last[i] = data
+            states[i], actions[i], rewards[i], next_states[i], absorbing[i],\
+                last[i] = data
             states[i] = np.array(states[i])
             next_states[i] = np.array(next_states[i])
 
@@ -340,9 +335,9 @@ class PrioritizedReplayMemory(Serializable):
         is_weight = (self._tree.size * sampling_probabilities) ** -self._beta()
         is_weight /= is_weight.max()
 
-        return np.array(states), np.array(actions), np.array(rewards), \
-               np.array(next_states), np.array(absorbing), np.array(last), \
-               idxs, is_weight
+        return np.array(states), np.array(actions), np.array(rewards),\
+            np.array(next_states), np.array(absorbing), np.array(last),\
+            idxs, is_weight
 
     def update(self, error, idx):
         """
@@ -383,7 +378,6 @@ class PrioritizedReplayMemory(Serializable):
             self._tree = SumTree(self._max_size)
 
 
-# todo sequential updates
 class SequentialReplayMemory(Serializable):
     """
     This class implements function to manage a replay memory as the one used in
@@ -393,7 +387,7 @@ class SequentialReplayMemory(Serializable):
     """
 
     def __init__(self, initial_size, max_size, unroll_steps,
-                 sequential_updates=False):
+                 sequential_updates=False, dummy=None):
         """
         Constructor.
 
@@ -401,18 +395,28 @@ class SequentialReplayMemory(Serializable):
             initial_size (int): initial number of elements in the replay memory
             max_size (int): maximum number of elements that the replay memory
                 can contain.
-            unroll_steps (int): number of elements per sample; also the minimum
-                length for an episode to be stored.
-            sequential_updates (bool): if True whole episodes are sampled
-                (corresponds to Sequential updates in the paper) otherwise
-                random parts of the episode will be sampled
+            unroll_steps (int): number of serial elements per sample; also the
+                minimum length for an episode to be stored.
+            sequential_updates (bool): if True whole episodes are sampled,
+                therefore, too short episodes will be padded with padding
+                states to always meet the length of `unroll_steps`.
+            dummy (tuple): A dummy sample to be used to pad episodes when using
+                 `sequential_updates`.
 
         """
         self._initial_size = initial_size
         self._max_size = max_size
         self._unroll_steps = unroll_steps
-        # todo
-        self._sequential_updates = sequential_updates and False
+        self._sequential_updates = sequential_updates
+
+        if sequential_updates:
+            assert dummy is not None, "For the sequential update an padding" \
+                                      "dummy must pe provided."
+
+            self.process_ep = self._pad
+            self.dummy = dummy
+        else:
+            self.process_ep = self._no_pad
 
         # length of each episode
         self._lengths = list()
@@ -513,8 +517,8 @@ class SequentialReplayMemory(Serializable):
             batch_size (int): the number of samples to return.
 
         Returns:
-            The samples as n_samples x unroll_steps x sample shape
-                todo or a whole episode if self.sequential_updates is True.
+            The samples as batch_size x unroll_steps x sample shape
+            or a batch of episodes if self.sequential_updates is True.
 
         """
         assert batch_size <= self._initial_size, \
@@ -530,9 +534,13 @@ class SequentialReplayMemory(Serializable):
         # randomly selected episodes
         eps = np.random.randint(len(self._states), size=batch_size)
 
-        # randomly selected start indices for EVERY episode
-        idx = np.random.randint(0, np.array(
-            self._lengths) - self._unroll_steps + 1)
+        if not self._sequential_updates:
+            # randomly selected start indices for EVERY episode
+            idx = np.random.randint(0, np.array(
+                self._lengths) - self._unroll_steps + 1)
+        else:
+            # start form the beginning
+            idx = np.zeros_like(self._lengths)
 
         for _ in range(self._unroll_steps):
 
@@ -560,8 +568,8 @@ class SequentialReplayMemory(Serializable):
 
             idx += 1
 
-        return np.array(s), np.array(a), np.array(r), np.array(ss), \
-               np.array(ab), np.array(last)
+        return np.array(s), np.array(a), np.array(r), np.array(ss),\
+            np.array(ab), np.array(last)
 
     def reset(self):
         """
@@ -596,15 +604,19 @@ class SequentialReplayMemory(Serializable):
         """
         return self._size
 
-    @staticmethod
-    def _split_dataset(dataset):
+    def _split_dataset(self, dataset):
         """
+        Splits the dataset into a list of full episodes and the rest.
+
+        Args:
+            dataset: The dataset to be split into distinct episodes.
+
         Returns:
             A list of full episodes in the dataset and the unfinished episode
 
         """
-        # split data into episodes based on absorbing flag
-        indices = np.where(np.array(dataset, dtype=object)[:, -2])[0].tolist()
+        # split data into episodes based on last flag
+        indices = np.where(np.array(dataset, dtype=object)[:, -1])[0].tolist()
 
         # calculate start and end values from indices
         args = (0,) + tuple(data + 1 for data in indices)
@@ -612,58 +624,14 @@ class SequentialReplayMemory(Serializable):
         episodes = []
         end = 0
         for start, end in zip(args, args[1:]):
-            episodes.append(dataset[start:end])
+            episodes.append(self.process_ep(dataset, start, end))
 
         return episodes, dataset[end:len(dataset)]
 
-    def get_batch_first(self, n_samples):
-        """
-        Returns the provided number of samples from the replay memory.
+    @staticmethod
+    def _no_pad(dataset, start, end):
+        return dataset[start:end]
 
-        Args:
-            n_samples (int): the number of samples to return.
-
-        Returns:
-            The samples as n_samples x unroll_steps x sample shape
-                todo or a whole episode if self.sequential_updates is True.
-
-        """
-        assert n_samples <= self._initial_size, \
-            "n_samples should be smaller than the initial size"
-
-        s = list()
-        a = list()
-        r = list()
-        ss = list()
-        ab = list()
-        last = list()
-
-        for ep in np.random.randint(len(self._states), size=n_samples):
-            ep_len = len(self._last[ep])
-            start = np.random.randint(0, ep_len - self._unroll_steps + 1)
-            end = start + self._unroll_steps
-
-            s_ep = list()
-            a_ep = list()
-            r_ep = list()
-            ss_ep = list()
-            ab_ep = list()
-            last_ep = list()
-
-            for i in range(start, end):
-                s_ep.append(np.array(self._states[ep][i]))
-                a_ep.append(self._actions[ep][i])
-                r_ep.append(self._rewards[ep][i])
-                ss_ep.append(np.array(self._next_states[ep][i]))
-                ab_ep.append(self._absorbing[ep][i])
-                last_ep.append(self._last[ep][i])
-
-            s.append(np.array(s_ep))
-            a.append(np.array(a_ep))
-            r.append(np.array(r_ep))
-            ss.append(np.array(ss_ep))
-            ab.append(np.array(ab_ep))
-            last.append(np.array(last_ep))
-
-        return np.array(s), np.array(a), np.array(r), np.array(ss), \
-               np.array(ab), np.array(last)
+    def _pad(self, dataset, start, end):
+        padding = self._unroll_steps + start - end
+        return [self.dummy] * padding + dataset[start:end]
