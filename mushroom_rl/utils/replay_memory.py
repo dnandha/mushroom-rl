@@ -410,7 +410,7 @@ class SequentialReplayMemory(Serializable):
         self._sequential_updates = sequential_updates
 
         if sequential_updates:
-            assert dummy is not None, "For the sequential update an padding" \
+            assert dummy is not None, "For the sequential update an padding " \
                                       "dummy must pe provided."
 
             self.process_ep = self._pad

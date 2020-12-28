@@ -7,8 +7,6 @@ from gym.spaces import Box
 
 from mushroom_rl.environments import Environment
 
-import warnings
-
 from mushroom_rl.policy.td_policy import EpsGreedy
 
 
@@ -18,10 +16,14 @@ class MemoryNetwork(nn.Module):
     with the DRQN algorithm. It provides base functionality to handle the
     latent state correctly.
     """
-    latent = None
+    def __init__(self, zero_latent=None):
+        super().__init__()
+        self._zero_latent = zero_latent
+
+        self.latent = zero_latent
 
     def reset_latent(self):
-        pass
+        self.latent = self._zero_latent
 
     def forward(self, state, action=None, **_):
 
@@ -36,9 +38,7 @@ class MemoryNetwork(nn.Module):
             return q_acted
 
     def memory_pass(self, _):
-        warnings.warn("Subclass should override memory_pass(self, state)",
-                      RuntimeWarning)
-        pass
+        raise NotImplementedError
 
     def _forward(self, hidden):
         raise NotImplementedError
@@ -62,9 +62,20 @@ class MemoryEpsGreedy(EpsGreedy):
             return max_a
 
         # update latent memory anyway
-        self._approximator.model.network.memory_pass(torch.from_numpy(s))
+        self.update_memory(s)
 
         return np.array([np.random.choice(self._approximator.n_actions)])
+
+    def set_q(self, approximator):
+        super(MemoryEpsGreedy, self).set_q(approximator)
+        if hasattr(self._approximator.model.network, 'memory_pass'):
+            self.update_memory = lambda s: \
+                self._approximator.model.network.memory_pass(
+                    torch.from_numpy(s))
+        else:
+            self.update_memory = self._approximator.predict
+
+    update_memory = None
 
 
 class FlagWrapper(ObservationWrapper):
