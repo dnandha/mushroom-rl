@@ -1,3 +1,4 @@
+import itertools
 import pickle
 import numpy as np
 
@@ -44,7 +45,10 @@ class PlotDataset(CollectDataset):
                 DataBuffer('Action_' + str(i), window_size))
 
         self.observation_buffers_list = []
-        for i in range(mdp_info.observation_space.shape[0]):
+
+        ranges = [range(s) for s in mdp_info.observation_space.shape]
+        indices = itertools.product(*ranges)
+        for i in indices:
             self.observation_buffers_list.append(
                 DataBuffer('Observation_' + str(i), window_size))
 
@@ -67,8 +71,8 @@ class PlotDataset(CollectDataset):
 
         dotted_limits = None
         if isinstance(mdp_info.observation_space, Box):
-            high_mdp = mdp_info.observation_space.high.tolist()
-            low_mdp = mdp_info.observation_space.low.tolist()
+            high_mdp = np.ravel(mdp_info.observation_space.high.tolist())
+            low_mdp = np.ravel(mdp_info.observation_space.low.tolist())
             if obs_normalized:
                 dotted_limits = []
                 for i in range(len(high_mdp)):
@@ -114,7 +118,7 @@ class PlotDataset(CollectDataset):
         super().__call__(dataset)
 
         for sample in dataset:
-            obs = sample[0]
+            obs = np.ravel(sample[0])
             action = sample[1]
             reward = sample[2]
 

@@ -46,7 +46,7 @@ def experiment(n_epochs, n_iterations, ep_per_run, save_states_to_disk):
 
     # Agent
     optimizer = AdaptiveOptimizer(eps=.01)
-    algorithm_params = dict(learning_rate=optimizer)
+    algorithm_params = dict(optimizer=optimizer)
     agent = REINFORCE(mdp.info, policy, **algorithm_params)
 
     # normalization callback
