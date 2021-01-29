@@ -1,10 +1,10 @@
 import numpy as np
 
-from mushroom_rl.algorithms.value.dqn import DQN
+from mushroom_rl.algorithms.value.dqn import AbstractDQN
 from mushroom_rl.utils.replay_memory import SequentialReplayMemory
 
 
-class DRQN(DQN):
+class DRQN(AbstractDQN):
     """
     Deep Recurrent Q-Network algorithm.
     "Deep Recurrent Q-Learning for Partially Observable MDPs".
@@ -14,8 +14,8 @@ class DRQN(DQN):
     def __init__(self, mdp_info, policy, approximator, approximator_params,
                  batch_size, target_update_frequency, unroll_steps,
                  replay_memory=None, initial_replay_size=500,
-                 max_replay_size=5000, fit_params=None,
-                 clip_reward=True, sequential_updates=False, dummy=None):
+                 max_replay_size=5000, fit_params=None, clip_reward=True,
+                 sequential_updates=False, dummy=None, double_dqn=False):
         """
         Constructor.
 
@@ -52,6 +52,12 @@ class DRQN(DQN):
                  np.shape(dummy[3]) != mdp_info.observation_space.shape):
             raise ValueError('Padding dummy does not match requirements.')
 
+        # double DQN
+        if double_dqn:
+            self._double = self._double_q
+        else:
+            self._double = lambda _, q: q
+
     def fit(self, dataset):
         # reset target latent
         self.target_approximator.model.network.reset_latent()
@@ -60,12 +66,29 @@ class DRQN(DQN):
         latent = self.approximator.model.network.latent
         self.approximator.model.network.reset_latent()
 
-        super(DRQN, self).fit(dataset)
+        loss = super(DRQN, self).fit(dataset)
 
         # set latent back to old value
         self.approximator.model.network.latent = latent
+
+        return loss
 
     def episode_start(self):
         super().episode_start()
         self.approximator.model.network.reset_latent()
         self._replay_memory.unfinished_episode = list()
+
+    def _next_q(self, next_state, absorbing):
+        q = self.target_approximator.predict(next_state)
+        q = self._double(next_state, q)
+
+        if np.any(absorbing):
+            shape = list(q.shape)
+            shape[-1] = 1
+            q *= 1 - absorbing.reshape(shape)
+
+        return np.max(q, axis=-1)
+
+    def _double_q(self, next_state, q):
+        max_a = np.argmax(q, axis=1)
+        return self.target_approximator.predict(next_state, max_a)
