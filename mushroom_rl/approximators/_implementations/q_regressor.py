@@ -1,4 +1,5 @@
 import numpy as np
+import itertools
 from mushroom_rl.core import Serializable
 
 
@@ -61,11 +62,11 @@ class QRegressor(Serializable):
         q = self.model.predict(state, **predict_params)
 
         if len(z) == 2:
-            action = z[1].ravel()
+            action = z[1]
             if q.ndim == 1:
                 return q[action]
             else:
-                return q[np.arange(q.shape[0]), action]
+                return np.take(q, action)
         else:
             return q
 
