@@ -175,6 +175,8 @@ class DQN(AbstractDQN):
     def _next_q(self, next_state, absorbing):
         q = self.target_approximator.predict(next_state)
         if np.any(absorbing):
-            q *= 1 - absorbing.reshape(-1, 1)
+            shape = list(q.shape)
+            shape[-1] = 1
+            q *= 1 - absorbing.reshape(shape)
 
-        return np.max(q, axis=1)
+        return np.max(q, axis=-1)
