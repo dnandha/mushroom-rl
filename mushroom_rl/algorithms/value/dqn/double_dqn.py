@@ -12,7 +12,7 @@ class DoubleDQN(DQN):
     """
     def _next_q(self, next_state, absorbing):
         q = self.approximator.predict(next_state)
-        max_a = np.argmax(q, axis=1)
+        max_a = np.argmax(q, axis=-1)
 
         double_q = self.target_approximator.predict(next_state, max_a)
         if np.any(absorbing):
