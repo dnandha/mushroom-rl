@@ -72,7 +72,6 @@ def experiment():
     # Agent
     params = dict(batch_size=10,
                   unroll_steps=10,
-                  n_approximators=1,
                   initial_replay_size=initial_size,
                   max_replay_size=1000,
                   target_update_frequency=1000)
