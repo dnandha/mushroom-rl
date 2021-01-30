@@ -1,21 +1,13 @@
 import numpy as np
 
-from mushroom_rl.algorithms.value.dqn import AbstractDQN
+from mushroom_rl.algorithms.value.dqn import AbstractDQN, DQN
 from mushroom_rl.utils.replay_memory import SequentialReplayMemory
 
 
-class DRQN(AbstractDQN):
-    """
-    Deep Recurrent Q-Network algorithm.
-    "Deep Recurrent Q-Learning for Partially Observable MDPs".
-    Hausknecht M. et al.. 2015.
-
-    """
-    def __init__(self, mdp_info, policy, approximator, approximator_params,
-                 batch_size, target_update_frequency, unroll_steps,
-                 replay_memory=None, initial_replay_size=500,
-                 max_replay_size=5000, fit_params=None, clip_reward=True,
-                 sequential_updates=False, dummy=None, double_dqn=False):
+class AbstractDRQN(AbstractDQN):
+    def __init__(self, mdp_info, policy, approximator, unroll_steps,
+                 sequential_updates=False, dummy=None, replay_memory=None,
+                 initial_replay_size=500, max_replay_size=5000, **params):
         """
         Constructor.
 
@@ -40,10 +32,7 @@ class DRQN(AbstractDQN):
                                                    dummy)
 
         super().__init__(mdp_info, policy, approximator,
-                         approximator_params, batch_size,
-                         target_update_frequency, replay_memory,
-                         initial_replay_size, max_replay_size,
-                         fit_params, clip_reward)
+                         replay_memory=replay_memory, **params)
 
         # make sure the dummy matches the real data
         if sequential_updates and\
@@ -51,12 +40,6 @@ class DRQN(AbstractDQN):
                  np.shape(dummy[0]) != mdp_info.observation_space.shape or
                  np.shape(dummy[3]) != mdp_info.observation_space.shape):
             raise ValueError('Padding dummy does not match requirements.')
-
-        # double DQN
-        if double_dqn:
-            self._double = self._double_q
-        else:
-            self._double = lambda _, q: q
 
     def fit(self, dataset):
         # reset target latent
@@ -66,29 +49,21 @@ class DRQN(AbstractDQN):
         latent = self.approximator.model.network.latent
         self.approximator.model.network.reset_latent()
 
-        loss = super(DRQN, self).fit(dataset)
+        super().fit(dataset)
 
         # set latent back to old value
         self.approximator.model.network.latent = latent
-
-        return loss
 
     def episode_start(self):
         super().episode_start()
         self.approximator.model.network.reset_latent()
         self._replay_memory.unfinished_episode = list()
 
-    def _next_q(self, next_state, absorbing):
-        q = self.target_approximator.predict(next_state)
-        q = self._double(next_state, q)
+class DRQN(AbstractDRQN, DQN):
+    """
+    Deep Recurrent Q-Network algorithm.
+    "Deep Recurrent Q-Learning for Partially Observable MDPs".
+    Hausknecht M. et al.. 2015.
 
-        if np.any(absorbing):
-            shape = list(q.shape)
-            shape[-1] = 1
-            q *= 1 - absorbing.reshape(shape)
-
-        return np.max(q, axis=-1)
-
-    def _double_q(self, next_state, q):
-        max_a = np.argmax(q, axis=1)
-        return self.target_approximator.predict(next_state, max_a)
+    """
+    pass

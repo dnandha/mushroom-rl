@@ -7,4 +7,4 @@ __all__ = ['FQI', 'DoubleFQI', 'LSPI', 'AbstractDQN', 'DQN', 'DoubleDQN',
            'DoubleQLearning', 'WeightedQLearning', 'MaxminQLearning',
            'SpeedyQLearning', 'RLearning', 'RQLearning', 'SARSA', 'SARSALambda',
            'SARSALambdaContinuous', 'ExpectedSARSA', 'TrueOnlineSARSALambda',
-           'DRQN']
+           'AbstractDRQN', 'DRQN', 'DoubleDRQN']
