@@ -59,6 +59,7 @@ class AbstractDRQN(AbstractDQN):
         self.approximator.model.network.reset_latent()
         self._replay_memory.unfinished_episode = list()
 
+
 class DRQN(AbstractDRQN, DQN):
     """
     Deep Recurrent Q-Network algorithm.
