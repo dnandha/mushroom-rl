@@ -5,7 +5,7 @@ from mushroom_rl.utils.replay_memory import SequentialReplayMemory
 
 
 class AbstractDRQN(AbstractDQN):
-    def __init__(self, mdp_info, policy, approximator, unroll_steps,
+    def __init__(self, mdp_info, policy, approximator, unroll_steps=4,
                  sequential_updates=False, dummy=None, replay_memory=None,
                  initial_replay_size=500, max_replay_size=5000, **params):
         """
