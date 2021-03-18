@@ -47,7 +47,10 @@ class MemoryNetwork(nn.Module):
 class MemoryEpsGreedy(EpsGreedy):
     """
     This class extends the EpsGreedy class such that the latent state of the
-    network is updated in every call of draw_action.
+    network is updated in every call of ´draw_action´.
+
+    Approximator network should provide a public method ´memory_pass´ for best
+    performance.
     """
     def draw_action(self, state):
         s = np.expand_dims(state, axis=(0, 1))

@@ -410,13 +410,14 @@ class SequentialReplayMemory(Serializable):
         self._sequential_updates = sequential_updates
 
         if sequential_updates:
-            assert dummy is not None, "For the sequential update an padding " \
-                                      "dummy must pe provided."
+            assert dummy is not None and len(dummy) == 6,\
+                "For the sequential updates a correct padding dummy must be" \
+                "provided."
 
-            self.process_ep = self._pad
-            self.dummy = dummy
+            self._process_ep = self._pad
+            self._dummy = dummy
         else:
-            self.process_ep = self._no_pad
+            self._process_ep = self._no_pad
 
         # length of each episode
         self._lengths = list()
@@ -447,6 +448,14 @@ class SequentialReplayMemory(Serializable):
             _last='pickle',
             _lengths='pickle'
         )
+
+    @property
+    def sequential_updates(self):
+        return self._sequential_updates
+
+    @property
+    def dummy(self):
+        return self._dummy
 
     def add(self, dataset):
         """
@@ -624,7 +633,7 @@ class SequentialReplayMemory(Serializable):
         episodes = []
         end = 0
         for start, end in zip(args, args[1:]):
-            episodes.append(self.process_ep(dataset, start, end))
+            episodes.append(self._process_ep(dataset, start, end))
 
         return episodes, dataset[end:len(dataset)]
 
@@ -634,4 +643,51 @@ class SequentialReplayMemory(Serializable):
 
     def _pad(self, dataset, start, end):
         padding = self._unroll_steps + start - end
-        return [self.dummy] * padding + dataset[start:end]
+        return [self._dummy] * padding + dataset[start:end]
+
+
+class ReplayMemory2(ReplayMemory):
+
+    def __init__(self, initial_size, max_size, unroll_steps=1):
+        super().__init__(initial_size, max_size)
+        self._unroll_steps = unroll_steps
+        self._add_save_attr(_unroll_steps='primitive')
+
+    def get(self, n_samples):
+        s = list()
+        a = list()
+        r = list()
+        ss = list()
+        ab = list()
+        last = list()
+
+        idx = np.random.randint(self.size - self._unroll_steps + 1,
+                                size=n_samples)
+
+        for _ in range(self._unroll_steps):
+            s_ep = list()
+            a_ep = list()
+            r_ep = list()
+            ss_ep = list()
+            ab_ep = list()
+            last_ep = list()
+
+            for i in idx:
+                s_ep.append(np.array(self._states[i]))
+                a_ep.append(self._actions[i])
+                r_ep.append(self._rewards[i])
+                ss_ep.append(np.array(self._next_states[i]))
+                ab_ep.append(self._absorbing[i])
+                last_ep.append(self._last[i])
+
+            s.append(np.array(s_ep))
+            a.append(np.array(a_ep))
+            r.append(np.array(r_ep))
+            ss.append(np.array(ss_ep))
+            ab.append(np.array(ab_ep))
+            last.append(np.array(last_ep))
+
+            idx += 1
+
+        return np.array(s), np.array(a), np.array(r), np.array(ss), \
+            np.array(ab), np.array(last)

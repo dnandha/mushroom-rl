@@ -12,6 +12,9 @@ class AbstractDRQN(AbstractDQN):
         Constructor.
 
         Args:
+            approximator (object): the approximator to use to fit the
+               Q-function. It must provide a public property ´latent´ and a
+               public method ´reset_latent()´.
             unroll_steps (int): number of serial elements per sample; also the
                 minimum length for an episode to be stored.
             sequential_updates (bool): if True whole episodes are sampled,
@@ -34,12 +37,12 @@ class AbstractDRQN(AbstractDQN):
         super().__init__(mdp_info, policy, approximator,
                          replay_memory=replay_memory, **params)
 
-        # make sure the dummy matches the real data
-        if sequential_updates and\
-                (len(replay_memory.dummy) != 6 or
-                 np.shape(dummy[0]) != mdp_info.observation_space.shape or
-                 np.shape(dummy[3]) != mdp_info.observation_space.shape):
-            raise ValueError('Padding dummy does not match requirements.')
+        # make sure the _dummy matches the real data
+        if replay_memory.sequential_updates and not\
+                np.shape(replay_memory.dummy[0]) ==\
+                np.shape(replay_memory.dummy[3]) ==\
+                mdp_info.observation_space.shape:
+            raise ValueError('Dummy observations don\'t match the real ones.')
 
     def fit(self, dataset):
         # reset target latent
