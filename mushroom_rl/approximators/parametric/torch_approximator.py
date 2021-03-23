@@ -17,7 +17,8 @@ class TorchApproximator(Serializable):
     """
     def __init__(self, input_shape, output_shape, network, optimizer=None,
                  loss=None, batch_size=0, n_fit_targets=1, use_cuda=False,
-                 reinitialize=False, dropout=False, quiet=True, **params):
+                 reinitialize=False, dropout=False, quiet=True,
+                 clip_gradients=None, **params):
         """
         Constructor.
 
@@ -41,6 +42,8 @@ class TorchApproximator(Serializable):
                 train;
             quiet (bool, True): if False, shows two progress bars, one for
                 epochs and one for the minibatches;
+            clip_gradients (int, None): If not None, the gradients are clipped
+                to [-clip_gradients, clip_gradients];
             **params: dictionary of parameters needed to construct the
                 network.
 
@@ -51,6 +54,7 @@ class TorchApproximator(Serializable):
         self._dropout = dropout
         self._quiet = quiet
         self._n_fit_targets = n_fit_targets
+        self._clip_gradients = clip_gradients
 
         self.network = network(input_shape, output_shape, use_cuda=use_cuda,
                                dropout=dropout, **params)
@@ -74,7 +78,8 @@ class TorchApproximator(Serializable):
             _n_fit_targets='primitive',
             network='torch',
             _optimizer='torch',
-            _loss='pickle'
+            _loss='pickle',
+            _clip_gradients='primitive'
         )
 
     def predict(self, *args, output_tensor=False, **kwargs):
@@ -226,6 +231,13 @@ class TorchApproximator(Serializable):
 
         self._optimizer.zero_grad()
         loss.backward()
+
+        # clip gradients
+        if self._clip_gradients is not None:
+            for param in self.network.parameters():
+                param.grad.data.clamp(-self._clip_gradients,
+                                      self._clip_gradients)
+
         self._optimizer.step()
 
         return loss.item()
