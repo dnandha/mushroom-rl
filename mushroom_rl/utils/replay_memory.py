@@ -387,7 +387,7 @@ class SequentialReplayMemory(Serializable):
     """
 
     def __init__(self, initial_size, max_size, unroll_steps,
-                 sequential_updates=False, dummy=None):
+                 pad=False, dummy=None):
         """
         Constructor.
 
@@ -397,8 +397,7 @@ class SequentialReplayMemory(Serializable):
                 can contain.
             unroll_steps (int): number of serial elements per sample; also the
                 minimum length for an episode to be stored.
-            sequential_updates (bool): if True whole episodes are sampled,
-                therefore, too short episodes will be padded with padding
+            pad (bool): if True, too short episodes will be padded with padding
                 states to always meet the length of `unroll_steps`.
             dummy (tuple): A dummy sample to be used to pad episodes when using
                  `sequential_updates`.
@@ -407,9 +406,8 @@ class SequentialReplayMemory(Serializable):
         self._initial_size = initial_size
         self._max_size = max_size
         self._unroll_steps = unroll_steps
-        self._sequential_updates = sequential_updates
 
-        if sequential_updates:
+        if pad:
             assert dummy is not None and len(dummy) == 6,\
                 "For the sequential updates a correct padding dummy must be" \
                 "provided."
@@ -450,12 +448,12 @@ class SequentialReplayMemory(Serializable):
         )
 
     @property
-    def sequential_updates(self):
-        return self._sequential_updates
-
-    @property
     def dummy(self):
         return self._dummy
+
+    @property
+    def pad(self):
+        return self._process_ep == self._pad
 
     def add(self, dataset):
         """
@@ -543,13 +541,9 @@ class SequentialReplayMemory(Serializable):
         # randomly selected episodes
         eps = np.random.randint(len(self._states), size=batch_size)
 
-        if not self._sequential_updates:
-            # randomly selected start indices for EVERY episode
-            idx = np.random.randint(0, np.array(
-                self._lengths) - self._unroll_steps + 1)
-        else:
-            # start form the beginning
-            idx = np.zeros_like(self._lengths)
+        # randomly selected start indices for EVERY episode
+        idx = np.random.randint(0, np.array(self._lengths) -
+                                self._unroll_steps + 1)
 
         for _ in range(self._unroll_steps):
 
