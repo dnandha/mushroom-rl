@@ -1,12 +1,13 @@
 import numpy as np
 
 from mushroom_rl.algorithms.value.dqn import AbstractDQN, DQN
-from mushroom_rl.utils.replay_memory import SequentialReplayMemory
+from mushroom_rl.utils.replay_memory import SequentialReplayMemory,\
+    ReplayMemory2
 
 
 class AbstractDRQN(AbstractDQN):
     def __init__(self, mdp_info, policy, approximator, unroll_steps=4,
-                 sequential_updates=False, dummy=None, replay_memory=None,
+                 pad_episodes=False, dummy=None, replay_memory=None,
                  initial_replay_size=500, max_replay_size=5000, **params):
         """
         Constructor.
@@ -24,25 +25,28 @@ class AbstractDRQN(AbstractDQN):
                  `sequential_updates`.
         """
 
-        if replay_memory is not None:
-            assert isinstance(replay_memory, SequentialReplayMemory),\
-                "replay_buffer must be of type SequentialReplayMemory."
-        else:
-            replay_memory = SequentialReplayMemory(initial_replay_size,
-                                                   max_replay_size,
-                                                   unroll_steps,
-                                                   sequential_updates,
-                                                   dummy)
+        # if replay_memory is not None:
+        #     assert isinstance(replay_memory, SequentialReplayMemory),\
+        #         "replay_buffer must be of type SequentialReplayMemory."
+        # else:
+        #     replay_memory = SequentialReplayMemory(initial_replay_size,
+        #                                            max_replay_size,
+        #                                            unroll_steps,
+        #                                            pad_episodes,
+        #                                            dummy)
+        replay_memory = ReplayMemory2(initial_replay_size,
+                                      max_replay_size,
+                                      unroll_steps)
 
         super().__init__(mdp_info, policy, approximator,
                          replay_memory=replay_memory, **params)
 
-        # make sure the _dummy matches the real data
-        if replay_memory.sequential_updates and not\
-                np.shape(replay_memory.dummy[0]) ==\
-                np.shape(replay_memory.dummy[3]) ==\
-                mdp_info.observation_space.shape:
-            raise ValueError('Dummy observations don\'t match the real ones.')
+        # # make sure the _dummy matches the real data
+        # if replay_memory.pad and not\
+        #         np.shape(replay_memory.dummy[0]) ==\
+        #         np.shape(replay_memory.dummy[3]) ==\
+        #         mdp_info.observation_space.shape:
+        #     raise ValueError('Dummy observations don\'t match the real ones.')
 
     def fit(self, dataset):
         # reset target latent
