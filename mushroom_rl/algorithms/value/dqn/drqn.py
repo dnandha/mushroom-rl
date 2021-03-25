@@ -34,9 +34,10 @@ class AbstractDRQN(AbstractDQN):
         #                                            unroll_steps,
         #                                            pad_episodes,
         #                                            dummy)
-        replay_memory = ReplayMemory2(initial_replay_size,
-                                      max_replay_size,
-                                      unroll_steps)
+        if replay_memory is None:
+            replay_memory = ReplayMemory2(initial_replay_size,
+                                          max_replay_size,
+                                          unroll_steps)
 
         super().__init__(mdp_info, policy, approximator,
                          replay_memory=replay_memory, **params)
