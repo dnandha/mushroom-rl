@@ -8,9 +8,10 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 
-from mushroom_rl.algorithms.value import AveragedDQN, CategoricalDQN, DQN, DoubleDQN, MaxminDQN
+from mushroom_rl.algorithms.value import AveragedDQN, CategoricalDQN, DQN,\
+    DoubleDQN, MaxminDQN, DuelingDQN, NoisyDQN, Rainbow
 from mushroom_rl.approximators.parametric import TorchApproximator
-from mushroom_rl.core import Core
+from mushroom_rl.core import Core, Logger
 from mushroom_rl.environments import *
 from mushroom_rl.policy import EpsGreedy
 from mushroom_rl.utils.dataset import compute_metrics
@@ -95,16 +96,16 @@ class FeatureNetwork(nn.Module):
         return h
 
 
-def print_epoch(epoch):
-    print('################################################################')
-    print('Epoch: ', epoch)
-    print('----------------------------------------------------------------')
+def print_epoch(epoch, logger):
+    logger.info('################################################################')
+    logger.info('Epoch: %d' % epoch)
+    logger.info('----------------------------------------------------------------')
 
 
-def get_stats(dataset):
+def get_stats(dataset, logger):
     score = compute_metrics(dataset)
-    print(('min_reward: %f, max_reward: %f, mean_reward: %f,'
-          ' games_completed: %d' % score))
+    logger.info(('min_reward: %f, max_reward: %f, mean_reward: %f,'
+                ' games_completed: %d' % score))
 
     return score
 
@@ -139,9 +140,9 @@ def experiment():
                                   'adam',
                                   'rmsprop',
                                   'rmspropcentered'],
-                         default='rmsprop',
+                         default='adam',
                          help='Name of the optimizer to use.')
-    arg_net.add_argument("--learning-rate", type=float, default=.00025,
+    arg_net.add_argument("--learning-rate", type=float, default=.0001,
                          help='Learning rate value of the optimizer.')
     arg_net.add_argument("--decay", type=float, default=.95,
                          help='Discount factor for the history coming from the'
@@ -153,7 +154,7 @@ def experiment():
 
     arg_alg = parser.add_argument_group('Algorithm')
     arg_alg.add_argument("--algorithm", choices=['dqn', 'ddqn', 'adqn', 'mmdqn',
-                                                 'cdqn'],
+                                                 'cdqn', 'dueldqn', 'ndqn', 'rainbow'],
                          default='dqn',
                          help='Name of the algorithm. dqn is for standard'
                               'DQN, ddqn is for Double DQN and adqn is for'
@@ -193,12 +194,19 @@ def experiment():
     arg_alg.add_argument("--max-no-op-actions", type=int, default=30,
                          help='Maximum number of no-op actions performed at the'
                               'beginning of the episodes.')
+    arg_alg.add_argument("--alpha-coeff", type=float, default=.6,
+                         help='Prioritization exponent for prioritized experience replay.')
     arg_alg.add_argument("--n-atoms", type=int, default=51,
                          help='Number of atoms for Categorical DQN.')
     arg_alg.add_argument("--v-min", type=int, default=-10,
                          help='Minimum action-value for Categorical DQN.')
     arg_alg.add_argument("--v-max", type=int, default=10,
                          help='Maximum action-value for Categorical DQN.')
+    arg_alg.add_argument("--n-steps-return", type=int, default=3,
+                         help='Number of steps for n-step return for Rainbow.')
+    arg_alg.add_argument("--sigma-coeff", type=float, default=.5,
+                         help='Sigma0 coefficient for noise initialization in'
+                              'NoisyDQN and Rainbow.')
 
     arg_utils = parser.add_argument_group('Utils')
     arg_utils.add_argument('--use-cuda', action='store_true',
@@ -272,6 +280,10 @@ def experiment():
                 max_no_op_actions=args.max_no_op_actions)
 
     if args.load_path:
+        logger = Logger(DQN.__name__, results_dir=None)
+        logger.strong_line()
+        logger.info('Experiment Algorithm: ' + DQN.__name__)
+
         # Agent
         agent = DQN.load(args.load_path)
         epsilon_test = Parameter(value=args.test_exploration_rate)
@@ -284,8 +296,7 @@ def experiment():
         dataset = core_test.evaluate(n_steps=args.test_samples,
                                      render=args.render,
                                      quiet=args.quiet)
-        get_stats(dataset)
-
+        get_stats(dataset, logger)
     else:
         # Policy
         epsilon = LinearParameter(value=args.initial_exploration_rate,
@@ -295,29 +306,24 @@ def experiment():
         epsilon_random = Parameter(value=1)
         pi = EpsGreedy(epsilon=epsilon_random)
 
-        class CategoricalLoss(nn.Module):
-            def forward(self, input, target):
-                input = input.clamp(1e-5)
-
-                return -torch.sum(target * torch.log(input))
-
         # Approximator
         approximator_params = dict(
-            network=Network if args.algorithm != 'cdqn' else FeatureNetwork,
+            network=Network if args.algorithm not in ['dueldqn', 'cdqn', 'ndqn', 'rainbow'] else FeatureNetwork,
             input_shape=mdp.info.observation_space.shape,
             output_shape=(mdp.info.action_space.n,),
             n_actions=mdp.info.action_space.n,
             n_features=Network.n_features,
             optimizer=optimizer,
-            loss=F.smooth_l1_loss if args.algorithm != 'cdqn' else CategoricalLoss(),
             use_cuda=args.use_cuda
         )
+        if args.algorithm not in ['cdqn', 'rainbow']:
+            approximator_params['loss'] = F.smooth_l1_loss
 
         approximator = TorchApproximator
 
         if args.prioritized:
             replay_memory = PrioritizedReplayMemory(
-                initial_replay_size, max_replay_size, alpha=.6,
+                initial_replay_size, max_replay_size, alpha=args.alpha_coeff,
                 beta=LinearParameter(.4, threshold_value=1,
                                      n=max_steps // train_frequency)
             )
@@ -334,28 +340,52 @@ def experiment():
         )
 
         if args.algorithm == 'dqn':
-            agent = DQN(mdp.info, pi, approximator,
+            alg = DQN
+            agent = alg(mdp.info, pi, approximator,
                         approximator_params=approximator_params,
                         **algorithm_params)
         elif args.algorithm == 'ddqn':
-            agent = DoubleDQN(mdp.info, pi, approximator,
-                              approximator_params=approximator_params,
-                              **algorithm_params)
+            alg = DoubleDQN
+            agent = alg(mdp.info, pi, approximator,
+                        approximator_params=approximator_params,
+                        **algorithm_params)
         elif args.algorithm == 'adqn':
-            agent = AveragedDQN(mdp.info, pi, approximator,
-                                approximator_params=approximator_params,
-                                n_approximators=args.n_approximators,
-                                **algorithm_params)
+            alg = AveragedDQN
+            agent = alg(mdp.info, pi, approximator,
+                        approximator_params=approximator_params,
+                        n_approximators=args.n_approximators,
+                        **algorithm_params)
         elif args.algorithm == 'mmdqn':
-            agent = MaxminDQN(mdp.info, pi, approximator,
-                              approximator_params=approximator_params,
-                              n_approximators=args.n_approximators,
-                              **algorithm_params)
+            alg = MaxminDQN
+            agent = alg(mdp.info, pi, approximator,
+                        approximator_params=approximator_params,
+                        n_approximators=args.n_approximators,
+                        **algorithm_params)
+        elif args.algorithm == 'dueldqn':
+            alg = DuelingDQN
+            agent = alg(mdp.info, pi, approximator_params=approximator_params,
+                        **algorithm_params)
         elif args.algorithm == 'cdqn':
-            agent = CategoricalDQN(mdp.info, pi,
-                                   approximator_params=approximator_params,
-                                   n_atoms=args.n_atoms, v_min=args.v_min,
-                                   v_max=args.v_max, **algorithm_params)
+            alg = CategoricalDQN
+            agent = alg(mdp.info, pi, approximator_params=approximator_params,
+                        n_atoms=args.n_atoms, v_min=args.v_min,
+                        v_max=args.v_max, **algorithm_params)
+        elif args.algorithm == 'ndqn':
+            alg = NoisyDQN
+            agent = alg(mdp.info, pi, approximator_params=approximator_params,
+                        sigma_coeff=args.sigma_coeff, **algorithm_params)
+        elif args.algorithm == 'rainbow':
+            alg = Rainbow
+            beta = LinearParameter(.4, threshold_value=1, n=max_steps // train_frequency)
+            agent = alg(mdp.info, pi, approximator_params=approximator_params,
+                        n_atoms=args.n_atoms, v_min=args.v_min,
+                        v_max=args.v_max, n_steps_return=args.n_steps_return,
+                        alpha_coeff=args.alpha_coeff, beta=beta,
+                        sigma_coeff=args.sigma_coeff, **algorithm_params)
+
+        logger = Logger(alg.__name__, results_dir=None)
+        logger.strong_line()
+        logger.info('Experiment Algorithm: ' + alg.__name__)
 
         # Algorithm
         core = Core(agent, mdp)
@@ -363,7 +393,7 @@ def experiment():
         # RUN
 
         # Fill replay memory with random dataset
-        print_epoch(0)
+        print_epoch(0, logger)
         core.learn(n_steps=initial_replay_size,
                    n_steps_per_fit=initial_replay_size, quiet=args.quiet)
 
@@ -375,12 +405,12 @@ def experiment():
         mdp.set_episode_end(False)
         dataset = core.evaluate(n_steps=test_samples, render=args.render,
                                 quiet=args.quiet)
-        scores.append(get_stats(dataset))
+        scores.append(get_stats(dataset, logger))
 
         np.save(folder_name + '/scores.npy', scores)
         for n_epoch in range(1, max_steps // evaluation_frequency + 1):
-            print_epoch(n_epoch)
-            print('- Learning:')
+            print_epoch(n_epoch, logger)
+            logger.info('- Learning:')
             # learning step
             pi.set_epsilon(epsilon)
             mdp.set_episode_end(True)
@@ -390,13 +420,13 @@ def experiment():
             if args.save:
                 agent.save(folder_name + '/agent_' + str(n_epoch) + '.msh')
 
-            print('- Evaluation:')
+            logger.info('- Evaluation:')
             # evaluation step
             pi.set_epsilon(epsilon_test)
             mdp.set_episode_end(False)
             dataset = core.evaluate(n_steps=test_samples, render=args.render,
                                     quiet=args.quiet)
-            scores.append(get_stats(dataset))
+            scores.append(get_stats(dataset, logger))
 
             np.save(folder_name + '/scores.npy', scores)
 

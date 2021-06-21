@@ -9,7 +9,9 @@ class MemoryDDPG(DDPG):
     def __init__(self, mdp_info, policy_class, policy_params, actor_params,
                  actor_optimizer, critic_params, batch_size,
                  initial_replay_size, max_replay_size, tau, unroll_steps=4,
-                 policy_delay=1, critic_fit_params=None, replay_memory=None):
+                 policy_delay=1, critic_fit_params=None,
+                 actor_predict_params=None, critic_predict_params=None,
+                 replay_memory=None):
         """
         Constructor.
 
@@ -22,7 +24,8 @@ class MemoryDDPG(DDPG):
         super().__init__(mdp_info, policy_class, policy_params, actor_params,
                          actor_optimizer, critic_params, batch_size,
                          initial_replay_size, max_replay_size, tau,
-                         policy_delay, critic_fit_params)
+                         policy_delay, critic_fit_params, actor_predict_params,
+                         critic_predict_params)
 
         if replay_memory is None:
             self._replay_memory = ReplayMemory2(initial_replay_size,
@@ -52,8 +55,10 @@ class MemoryDDPG(DDPG):
         self._actor_approximator.model.network.reset_latent()
         self._critic_approximator.model.network.reset_latent()
 
-        action = self._actor_approximator(state, output_tensor=True)
-        q = self._critic_approximator(state, action, output_tensor=True)
+        action = self._actor_approximator(state, output_tensor=True,
+                                          **self._actor_predict_params)
+        q = self._critic_approximator(state, action, output_tensor=True,
+                                      **self._critic_predict_params)
 
         return -q.mean()
 

@@ -21,9 +21,10 @@ def glob_data_files(data_package, data_type=None):
     for directory in directories:
         subdir = directory[len(data_dir)+1:]
         if subdir != "":
-            files = subdir  + data_type
+            files = subdir + data_type
             data_files.append(files)
     return data_files
+
 
 here = path.abspath(path.dirname(__file__))
 
@@ -49,7 +50,7 @@ for group_name in extras:
         all_deps += extras[group_name]
 extras['all'] = all_deps
 
-long_description = 'Mushroom is a Python Reinforcement Learning (RL) library' \
+long_description = 'MushroomRL is a Python Reinforcement Learning (RL) library' \
                    ' whose modularity allows to easily use well-known Python' \
                    ' libraries for tensor computation (e.g. PyTorch, Tensorflow)' \
                    ' and RL benchmarks (e.g. OpenAI Gym, PyBullet, Deepmind' \
@@ -67,12 +68,13 @@ ext_modules = [Extension('mushroom_rl.environments.mujoco_envs.humanoid_gait.'
                          include_dirs=[numpy.get_include()])]
 
 mujoco_data_package = 'mushroom_rl.environments.mujoco_envs.data'
-extrenal_simulation_package = 'mushroom_rl.environments.mujoco_envs.humanoid_gait._external_simulation'
+pybullet_data_package = 'mushroom_rl.environments.pybullet_envs.data'
+external_simulation_package = 'mushroom_rl.environments.mujoco_envs.humanoid_gait._external_simulation'
 
 setup(
     name='mushroom-rl',
     version=__version__,
-    description='A Python toolkit for Reinforcement Learning experiments.',
+    description='A Python library for Reinforcement Learning experiments.',
     long_description=long_description,
     url='https://github.com/MushroomRL/mushroom-rl',
     author="Carlo D'Eramo, Davide Tateo",
@@ -90,6 +92,7 @@ setup(
     cmdclass={'build_ext': build_ext},
     package_data={
         mujoco_data_package: glob_data_files(mujoco_data_package),
-        extrenal_simulation_package: ["*.pyx"]},
+        pybullet_data_package: glob_data_files(pybullet_data_package),
+        external_simulation_package: ["*.pyx"]},
     ext_modules=cythonize(ext_modules)
 )

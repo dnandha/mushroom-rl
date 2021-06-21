@@ -5,7 +5,7 @@ import numpy as np
 from gym.core import ObservationWrapper
 from gym.spaces import Box
 
-from mushroom_rl.environments import Environment
+from mushroom_rl.core import Environment
 
 from mushroom_rl.policy.td_policy import EpsGreedy
 
@@ -55,7 +55,7 @@ class MemoryEpsGreedy(EpsGreedy):
     def draw_action(self, state):
         s = np.expand_dims(state, axis=(0, 1))
         if not np.random.uniform() < self._epsilon(state):
-            q = self._approximator.predict(s)
+            q = self._approximator.predict(s, **self._predict_params)
             q = q.squeeze().squeeze()
             max_a = np.argwhere(q == np.max(q)).ravel()
 

@@ -5,6 +5,7 @@ from mushroom_rl.policy import Policy
 from mushroom_rl.approximators import Regressor
 from mushroom_rl.approximators.parametric import TorchApproximator
 from mushroom_rl.utils.replay_memory import ReplayMemory
+from mushroom_rl.utils.parameters import Parameter, to_parameter
 
 from copy import deepcopy
 
@@ -19,7 +20,7 @@ class DDPG(DeepAC):
     def __init__(self, mdp_info, policy_class, policy_params,
                  actor_params, actor_optimizer, critic_params, batch_size,
                  initial_replay_size, max_replay_size, tau, policy_delay=1,
-                 critic_fit_params=None):
+                 critic_fit_params=None, actor_predict_params=None, critic_predict_params=None):
         """
         Constructor.
 
@@ -32,23 +33,29 @@ class DDPG(DeepAC):
                 algorithm;
             critic_params (dict): parameters of the critic approximator to
                 build;
-            batch_size (int): the number of samples in a batch;
+            batch_size ([int, Parameter]): the number of samples in a batch;
             initial_replay_size (int): the number of samples to collect before
                 starting the learning;
             max_replay_size (int): the maximum number of samples in the replay
                 memory;
-            tau (float): value of coefficient for soft updates;
-            policy_delay (int, 1): the number of updates of the critic after
+            tau ((float, Parameter)): value of coefficient for soft updates;
+            policy_delay ([int, Parameter], 1): the number of updates of the critic after
                 which an actor update is implemented;
             critic_fit_params (dict, None): parameters of the fitting algorithm
                 of the critic approximator;
+            actor_predict_params (dict, None): parameters for the prediction with the
+                actor approximator;
+            critic_predict_params (dict, None): parameters for the prediction with the
+                critic approximator.
 
         """
         self._critic_fit_params = dict() if critic_fit_params is None else critic_fit_params
+        self._actor_predict_params = dict() if actor_predict_params is None else actor_predict_params
+        self._critic_predict_params = dict() if critic_predict_params is None else critic_predict_params
 
-        self._batch_size = batch_size
-        self._tau = tau
-        self._policy_delay = policy_delay
+        self._batch_size = to_parameter(batch_size)
+        self._tau = to_parameter(tau)
+        self._policy_delay = to_parameter(policy_delay)
         self._fit_count = 0
 
         self._replay_memory = ReplayMemory(initial_replay_size, max_replay_size)
@@ -75,10 +82,12 @@ class DDPG(DeepAC):
         policy_parameters = self._actor_approximator.model.network.parameters()
 
         self._add_save_attr(
-            _critic_fit_params='pickle', 
-            _batch_size='primitive',
-            _tau='primitive',
-            _policy_delay='primitive',
+            _critic_fit_params='pickle',
+            _critic_predict_params='pickle',
+            _actor_predict_params='pickle',
+            _batch_size='mushroom',
+            _tau='mushroom',
+            _policy_delay='mushroom',
             _fit_count='primitive',
             _replay_memory='mushroom',
             _critic_approximator='mushroom',
@@ -92,7 +101,7 @@ class DDPG(DeepAC):
         self._replay_memory.add(dataset)
         if self._replay_memory.initialized:
             state, action, reward, next_state, absorbing, _ =\
-                self._replay_memory.get(self._batch_size)
+                self._replay_memory.get(self._batch_size())
 
             q_next = self._next_q(next_state, absorbing)
             q = reward + self.mdp_info.gamma * q_next
@@ -100,7 +109,7 @@ class DDPG(DeepAC):
             self._critic_approximator.fit(state, action, q,
                                           **self._critic_fit_params)
 
-            if self._fit_count % self._policy_delay == 0:
+            if self._fit_count % self._policy_delay() == 0:
                 loss = self._loss(state)
                 self._optimize_actor_parameters(loss)
 
@@ -112,8 +121,8 @@ class DDPG(DeepAC):
             self._fit_count += 1
 
     def _loss(self, state):
-        action = self._actor_approximator(state, output_tensor=True)
-        q = self._critic_approximator(state, action, output_tensor=True)
+        action = self._actor_approximator(state, output_tensor=True, **self._actor_predict_params)
+        q = self._critic_approximator(state, action, output_tensor=True, **self._critic_predict_params)
 
         return -q.mean()
 
@@ -130,9 +139,9 @@ class DDPG(DeepAC):
             action returned by the actor.
 
         """
-        a = self._target_actor_approximator(next_state)
+        a = self._target_actor_approximator.predict(next_state, **self._actor_predict_params)
 
-        q = self._target_critic_approximator.predict(next_state, a)
+        q = self._target_critic_approximator.predict(next_state, a, **self._critic_predict_params)
         q *= 1 - absorbing
 
         return q
@@ -140,3 +149,15 @@ class DDPG(DeepAC):
     def _post_load(self):
         self._actor_approximator = self.policy._approximator
         self._update_optimizer_parameters(self._actor_approximator.model.network.parameters())
+
+    def set_logger(self, logger, loss_filename='loss_critic'):
+        """
+        Setter that can be used to pass a logger to the algorithm
+
+        Args:
+            logger (Logger): the logger to be used by the algorithm;
+            loss_filename (str, 'loss_critic'): optional string to specify
+                the loss filename for the critic.
+
+        """
+        self._critic_approximator.set_logger(logger, loss_filename)

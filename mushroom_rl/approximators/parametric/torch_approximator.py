@@ -79,8 +79,11 @@ class TorchApproximator(Serializable):
             network='torch',
             _optimizer='torch',
             _loss='pickle',
-            _clip_gradients='primitive'
+            _clip_gradients='primitive',
+            _last_loss='none'
         )
+
+        self._last_loss = None
 
     def predict(self, *args, output_tensor=False, **kwargs):
         """
@@ -201,6 +204,8 @@ class TorchApproximator(Serializable):
                     else:
                         patience_count += 1
 
+                    self._last_loss = mean_loss_current
+
                     epochs_count += 1
         else:
             with trange(n_epochs, disable=self._quiet) as t_epochs:
@@ -210,6 +215,8 @@ class TorchApproximator(Serializable):
 
                     if not self._quiet:
                         t_epochs.set_postfix(loss=mean_loss_current)
+
+                    self._last_loss = mean_loss_current
 
         if self._dropout:
             self.network.eval()
@@ -224,7 +231,9 @@ class TorchApproximator(Serializable):
         for batch in batches:
             loss_current.append(self._fit_batch(batch, use_weights, kwargs))
 
-        return np.mean(loss_current)
+        mean_loss_current = np.mean(loss_current)
+
+        return mean_loss_current
 
     def _fit_batch(self, batch, use_weights, kwargs):
         loss = self._compute_batch_loss(batch, use_weights, kwargs)
@@ -352,6 +361,10 @@ class TorchApproximator(Serializable):
     @property
     def use_cuda(self):
         return self._use_cuda
+
+    @property
+    def loss_fit(self):
+        return self._last_loss
 
     def _post_load(self):
         if self._optimizer is not None:

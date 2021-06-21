@@ -3,7 +3,7 @@ from scipy.optimize import brentq
 from scipy.special import logsumexp
 from .policy import Policy
 
-from mushroom_rl.utils.parameters import Parameter
+from mushroom_rl.utils.parameters import Parameter, to_parameter
 
 
 class TDPolicy(Policy):
@@ -13,9 +13,10 @@ class TDPolicy(Policy):
 
         """
         self._approximator = None
+        self._predict_params = dict()
 
-        self._add_save_attr(_approximator='mushroom!')
-
+        self._add_save_attr(_approximator='mushroom!',
+                            _predict_params='pickle')
 
     def set_q(self, approximator):
         """
@@ -44,21 +45,20 @@ class EpsGreedy(TDPolicy):
         Constructor.
 
         Args:
-            epsilon (Parameter): the exploration coefficient. It indicates
+            epsilon ([float, Parameter]): the exploration coefficient. It indicates
                 the probability of performing a random actions in the current
                 step.
 
         """
         super().__init__()
 
-        assert isinstance(epsilon, Parameter)
-        self._epsilon = epsilon
+        self._epsilon = to_parameter(epsilon)
 
-        self._add_save_attr(_epsilon='pickle')
+        self._add_save_attr(_epsilon='mushroom')
 
     def __call__(self, *args):
         state = args[0]
-        q = self._approximator.predict(np.expand_dims(state, axis=0)).ravel()
+        q = self._approximator.predict(np.expand_dims(state, axis=0), **self._predict_params).ravel()
         max_a = np.argwhere(q == np.max(q)).ravel()
 
         p = self._epsilon.get_value(state) / self._approximator.n_actions
@@ -77,7 +77,7 @@ class EpsGreedy(TDPolicy):
 
     def draw_action(self, state):
         if not np.random.uniform() < self._epsilon(state):
-            q = self._approximator.predict(state)
+            q = self._approximator.predict(state, **self._predict_params)
             max_a = np.argwhere(q == np.max(q)).ravel()
 
             if len(max_a) > 1:
@@ -92,13 +92,11 @@ class EpsGreedy(TDPolicy):
         Setter.
 
         Args:
-            epsilon (Parameter): the exploration coefficient. It indicates the
+            epsilon ([float, Parameter]): the exploration coefficient. It indicates the
             probability of performing a random actions in the current step.
 
         """
-        assert isinstance(epsilon, Parameter)
-
-        self._epsilon = epsilon
+        self._epsilon = to_parameter(epsilon)
 
     def update(self, *idx):
         """
@@ -123,20 +121,20 @@ class Boltzmann(TDPolicy):
         Constructor.
 
         Args:
-            beta (Parameter): the inverse of the temperature distribution. As
+            beta ([float, Parameter]): the inverse of the temperature distribution. As
             the temperature approaches infinity, the policy becomes more and
             more random. As the temperature approaches 0.0, the policy becomes
             more and more greedy.
 
         """
         super().__init__()
-        self._beta = beta
+        self._beta = to_parameter(beta)
 
-        self._add_save_attr(_beta='pickle')
+        self._add_save_attr(_beta='mushroom')
 
     def __call__(self, *args):
         state = args[0]
-        q_beta = self._approximator.predict(state) * self._beta(state)
+        q_beta = self._approximator.predict(state, **self._predict_params) * self._beta(state)
         q_beta -= q_beta.max()
         qs = np.exp(q_beta)
 
@@ -156,12 +154,10 @@ class Boltzmann(TDPolicy):
         Setter.
 
         Args:
-            beta (Parameter): the inverse of the temperature distribution.
+            beta ((float, Parameter)): the inverse of the temperature distribution.
 
         """
-        assert isinstance(beta, Parameter)
-
-        self._beta = beta
+        self._beta = to_parameter(beta)
 
     def update(self, *idx):
         """
@@ -183,16 +179,22 @@ class Mellowmax(Boltzmann):
     Littman M.L.. 2017.
 
     """
-
-    class MellowmaxParameter:
+    class MellowmaxParameter(Parameter):
         def __init__(self, outer, omega, beta_min, beta_max):
             self._omega = omega
             self._outer = outer
             self._beta_min = beta_min
             self._beta_max = beta_max
 
+            self._add_save_attr(
+                _omega='primitive',
+                _outer='primitive',
+                _beta_min='primitive',
+                _beta_max='primitive',
+            )
+
         def __call__(self, state):
-            q = self._outer._approximator.predict(state)
+            q = self._outer._approximator.predict(state, **self._outer._predict_params)
             mm = (logsumexp(q * self._omega(state)) - np.log(
                 q.size)) / self._omega(state)
 

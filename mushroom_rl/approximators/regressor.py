@@ -24,8 +24,8 @@ class Regressor(Serializable):
     listed before simply providing a ``n_models`` parameter greater than 1.
 
     """
-    def __init__(self, approximator, input_shape, output_shape=(1,),
-                 n_actions=None, n_models=1, **params):
+    def __init__(self, approximator, input_shape, output_shape=None,
+                 n_actions=None, n_models=None, **params):
         """
         Constructor.
 
@@ -33,13 +33,19 @@ class Regressor(Serializable):
             approximator (class): the approximator class to use to create
                 the model;
             input_shape (tuple): the shape of the input of the model;
-            output_shape (tuple, (1,)): the shape of the output of the model;
+            output_shape (tuple, None): the shape of the output of the model;
             n_actions (int, None): number of actions considered to create a
                 ``QRegressor`` or an ``ActionRegressor``;
             n_models (int, 1): number of models to create;
             **params: other parameters to create each model.
 
         """
+        if n_actions is None:
+            assert output_shape is not None
+        else:
+            if output_shape is None:
+                output_shape = (1,)
+
         if not approximator.__module__.startswith('sklearn'):
             params['input_shape'] = input_shape
             params['output_shape'] = output_shape
@@ -48,11 +54,11 @@ class Regressor(Serializable):
         self._output_shape = output_shape
 
         self.n_actions = n_actions
-
-        assert n_models >= 1
         self._n_models = n_models
+        self._logger = None
 
-        if self._n_models > 1:
+        if self._n_models is not None:
+            assert self._n_models >= 1
             params['model'] = approximator
             params['n_models'] = n_models
             approximator = Ensemble
@@ -68,12 +74,16 @@ class Regressor(Serializable):
                                           len(self.input_shape),
                                           **params)
 
+        self._logger = None
+        self._loss_filename = None
+
         self._add_save_attr(
             _input_shape='primitive',
             _output_shape='primitive',
             n_actions='primitive',
             _n_models='primitive',
-            _impl='mushroom'
+            _impl='mushroom',
+            _logger='none'
         )
 
     def __call__(self, *z, **predict_params):
@@ -101,6 +111,8 @@ class Regressor(Serializable):
         if z[0].ndim == ndim:
             z = [np.expand_dims(z_i, axis=0) for z_i in z]
         self._impl.fit(*z, **fit_params)
+
+        self._log()
 
     def predict(self, *z, **predict_params):
         """
@@ -216,12 +228,44 @@ class Regressor(Serializable):
                                       ' non-differentiable regressor.')
 
     def __len__(self):
-        return 1 if self._n_models == 1 else len(self._impl)
+        return 1 if self._n_models is None else len(self._impl)
 
     def __getitem__(self, item):
-        if len(self) == 1:
-            assert item == 0
-
+        if self._n_models is None:
             return self.model
         else:
             return self.model[item]
+
+    def set_logger(self, logger, loss_filename=None):
+        """
+        Setter that can be used to pass a logger to the regressor.
+
+        Args:
+            logger (Logger): the logger to be used by the regressor;
+            loss_filename (str, None): optional string to specify the loss filename.
+
+        """
+        self._logger = logger
+        self._loss_filename = loss_filename
+
+    def _log(self):
+        if self._logger:
+            losses_fit = list()
+            for i in range(len(self)):
+                model_i = self[i]
+                if hasattr(model_i, 'loss_fit'):
+                    m_loss = model_i.loss_fit
+                    if hasattr(m_loss, 'squeeze'):
+                        m_loss = m_loss.squeeze()
+                    losses_fit.append(m_loss)
+
+            losses_fit = np.array(losses_fit).squeeze()
+
+            if self._loss_filename is None:
+                save_dict = dict(loss=losses_fit)
+            else:
+                save_dict = {self._loss_filename: losses_fit}
+
+            self._logger.log_numpy(**save_dict)
+
+

@@ -1,4 +1,5 @@
 import numpy as np
+import torch
 from sklearn.exceptions import NotFittedError
 
 from mushroom_rl.core import Serializable
@@ -29,7 +30,8 @@ class Ensemble(Serializable):
             self._model.append(model(**params))
 
         self._add_save_attr(
-            _model=self._get_serialization_method(model)
+            _model=self._get_serialization_method(model),
+            _prediction='primitive'
         )
 
     def fit(self, *z, idx=None, **fit_params):
@@ -71,35 +73,39 @@ class Ensemble(Serializable):
 
         """
         if idx is None:
-            predictions = list()
-            for i in range(len(self._model)):
-                try:
-                    predictions.append(self[i].predict(*z, **predict_params))
-                except NotFittedError:
-                    pass
+            idx = [x for x in range(len(self))]
 
-            if len(predictions) == 0:
-                raise NotFittedError
-
-            prediction = self._prediction if prediction is None else prediction
-
-            if prediction == 'mean':
-                results = np.mean(predictions, axis=0)
-            elif prediction == 'sum':
-                results = np.sum(predictions, axis=0)
-            elif prediction == 'min':
-                results = np.min(predictions, axis=0)
-            elif prediction == 'max':
-                results = np.max(predictions, axis=0)
-            else:
-                raise ValueError
-            if compute_variance:
-                results = [results, np.var(predictions, ddof=1, axis=0)]
-        else:
+        if isinstance(idx, int):
             try:
                 results = self[idx].predict(*z, **predict_params)
             except NotFittedError:
                 raise NotFittedError
+        else:
+            predictions = list()
+            for i in idx:
+                try:
+                    predictions.append(self[i].predict(*z, **predict_params))
+                except NotFittedError:
+                    raise NotFittedError
+
+            prediction = self._prediction if prediction is None else prediction
+            if isinstance(predictions[0], np.ndarray):
+                predictions = np.array(predictions)
+            else:
+                predictions = torch.stack(predictions, axis=0)
+
+            if prediction == 'mean':
+                results = predictions.mean(0)
+            elif prediction == 'sum':
+                results = predictions.sum(0)
+            elif prediction == 'min':
+                results = predictions.min(0)
+            elif prediction == 'max':
+                results = predictions.max(0)
+            else:
+                raise ValueError
+            if compute_variance:
+                results = [results, predictions.var(0)]
 
         return results
 

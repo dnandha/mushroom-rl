@@ -58,6 +58,8 @@ class Serializable(object):
                 if attribute is not None:
                     if method == 'primitive':
                         primitive_dictionary[att] = attribute
+                    elif method == 'none':
+                        pass
                     elif hasattr(self, '_save_{}'.format(method)):
                         save_method = getattr(self, '_save_{}'.format(method))
                         file_name = "{}.{}".format(att, method)
@@ -102,8 +104,12 @@ class Serializable(object):
     @classmethod
     def load_zip(cls, zip_file, folder=''):
         config_path = Serializable._append_folder(folder, 'config')
-        object_type, save_attributes, primitive_dictionary = \
-            cls._load_pickle(zip_file, config_path).values()
+
+        try:
+            object_type, save_attributes, primitive_dictionary = \
+                cls._load_pickle(zip_file, config_path).values()
+        except KeyError:
+            return None
 
         if object_type is list:
             return cls._load_list(zip_file, folder, primitive_dictionary['len'])
@@ -158,12 +164,20 @@ class Serializable(object):
     def _add_save_attr(self, **attr_dict):
         """
         Add attributes that should be saved for an agent.
+        For every attribute, it is necessary to specify the method to be used to
+        save and load.
+        Available methods are: numpy, mushroom, torch, json, pickle, primitive
+        and none. The primitive method can be used to store primitive attributes,
+        while the none method always skip the attribute, but ensure that it is
+        initialized to None after the load. The mushroom method can be used with
+        classes that implement the Serializable interface. All the other methods
+        use the library named.
+        If a "!" character is added at the end of the method, the field will be
+        saved only if full_save is set to True.
 
         Args:
             **attr_dict: dictionary of attributes mapped to the method
-                that should be used to save and load them. If a "!" character
-                is added at the end of the method, the field will be saved only
-                if full_save is set to True.
+                that should be used to save and load them.
 
         """
         if not hasattr(self, '_save_attributes'):
