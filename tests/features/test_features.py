@@ -1,7 +1,7 @@
 import numpy as np
 
 from mushroom_rl.features import Features
-from mushroom_rl.features.tiles import Tiles
+from mushroom_rl.features.tiles import Tiles, VoronoiTiles
 from mushroom_rl.features.basis import GaussianRBF, FourierBasis
 from mushroom_rl.features.tensors import GaussianRBFTensor, RandomFourierBasis
 
@@ -26,6 +26,37 @@ def test_tiles():
 
     for i, x_i in enumerate(zip(x_1, x_2)):
         assert np.all(features(x_i[0], x_i[1]) == y[i])
+        assert features.size == y[i].size
+
+
+def test_tiles_voronoi():
+    tilings_list = [
+        VoronoiTiles.generate(3, 10,
+                              low=np.array([0., -.5]),
+                              high=np.array([1., .5])),
+        VoronoiTiles.generate(3, 10,
+                              mu=np.array([.5, -.5]),
+                              sigma=np.array([.2, .6]))
+    ]
+
+    for tilings in tilings_list:
+        features = Features(tilings=tilings)
+
+        x = np.random.rand(10, 2) + [0., -.5]
+
+        y = features(x)
+
+        for i, x_i in enumerate(x):
+            assert np.all(features(x_i) == y[i])
+
+        x_1 = x[:, 0].reshape(-1, 1)
+        x_2 = x[:, 1].reshape(-1, 1)
+
+        assert np.all(features(x_1, x_2) == y)
+
+        for i, x_i in enumerate(zip(x_1, x_2)):
+            assert np.all(features(x_i[0], x_i[1]) == y[i])
+            assert features.size == y[i].size
 
 
 def test_basis():
@@ -48,6 +79,7 @@ def test_basis():
 
     for i, x_i in enumerate(zip(x_1, x_2)):
         assert np.all(features(x_i[0], x_i[1]) == y[i])
+        assert features.size == y[i].size
 
 
 def test_tensor():
@@ -65,6 +97,7 @@ def test_tensor():
 
     for i, x_i in enumerate(x):
         assert np.allclose(features(x_i), y[i])
+        assert features.size == y[i].size
 
     assert np.all(y[:, -1] == 1)
 
@@ -75,6 +108,7 @@ def test_tensor():
 
     for i, x_i in enumerate(zip(x_1, x_2)):
         assert np.allclose(features(x_i[0], x_i[1]), y[i])
+        assert features.size == y[i].size
 
 
 def test_basis_and_tensors():
@@ -112,6 +146,7 @@ def test_fourier():
                     0.95105652, 0.15643447, -1.])
 
     assert np.allclose(features(x), res)
+    assert features.size == res.size
 
 
 def test_random_fourier():
@@ -126,3 +161,4 @@ def test_random_fourier():
                     0.476112,  0.4179958,  0.99205977,  0.5216869,  1.])
 
     assert np.allclose(features(x), res)
+    assert features.size == res.size

@@ -8,7 +8,7 @@ try:
 except ImportError:
     pybullet_found = False
 
-from mushroom_rl.environments import Environment, MDPInfo
+from mushroom_rl.core import Environment, MDPInfo
 from mushroom_rl.utils.spaces import *
 
 gym.logger.set_level(40)
@@ -21,30 +21,46 @@ class Gym(Environment):
     are managed in a separate class.
 
     """
-    def __init__(self, name, horizon, gamma, wrappers=None, **env_args):
+    def __init__(self, name, horizon=None, gamma=0.99, wrappers=None, wrappers_args=None,
+                 **env_args):
         """
         Constructor.
 
         Args:
              name (str): gym id of the environment;
-             horizon (int): the horizon;
-             gamma (float): the discount factor;
-             wrappers (list): list of wrappers to apply over the environment;
-             **env_args: other gym environment parameters.
+             horizon (int): the horizon. If None, use the one from Gym;
+             gamma (float, 0.99): the discount factor;
+             wrappers (list, None): list of wrappers to apply over the environment. It
+                is possible to pass arguments to the wrappers by providing
+                a tuple with two elements: the gym wrapper class and a
+                dictionary containing the parameters needed by the wrapper
+                constructor;
+            wrappers_args (list, None): list of list of arguments for each wrapper;
+            ** env_args: other gym environment parameters.
 
         """
+
         # MDP creation
-        self._close_at_stop = True
+        self._not_pybullet = True
+        self._first = True
         if pybullet_found and '- ' + name in pybullet_envs.getList():
             import pybullet
             pybullet.connect(pybullet.DIRECT)
-            self._close_at_stop = False
+            self._not_pybullet = False
 
         self.env = gym.make(name, **env_args)
-        if wrappers is not None:
-            for wrapper in wrappers:
-                self.env = wrapper(self.env)
 
+        if wrappers is not None:
+            if wrappers_args is None:
+                wrappers_args = [dict()] * len(wrappers)
+            for wrapper, args in zip(wrappers, wrappers_args):
+                if isinstance(wrapper, tuple):
+                    self.env = wrapper[0](self.env, *args, **wrapper[1])
+                else:
+                    self.env = wrapper(self.env, *args, **env_args)
+
+        if horizon is None:
+            horizon = self.env._max_episode_steps
         self.env._max_episode_steps = np.inf  # Hack to ignore gym time limit.
 
         # MDP properties
@@ -79,11 +95,13 @@ class Gym(Environment):
         return np.atleast_1d(obs), reward, absorbing, info
 
     def render(self, mode='human'):
-        self.env.render(mode=mode)
+        if self._first or self._not_pybullet:
+            self.env.render(mode=mode)
+            self._first = False
 
     def stop(self):
         try:
-            if self._close_at_stop:
+            if self._not_pybullet:
                 self.env.close()
         except:
             pass

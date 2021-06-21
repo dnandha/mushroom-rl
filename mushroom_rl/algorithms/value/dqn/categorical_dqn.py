@@ -7,6 +7,17 @@ from mushroom_rl.algorithms.value.dqn import AbstractDQN
 from mushroom_rl.approximators.parametric.torch_approximator import *
 
 
+def categorical_loss(input, target, reduction='sum'):
+    input = input.clamp(1e-5)
+
+    if reduction == 'sum':
+        return -torch.sum(target * torch.log(input))
+    elif reduction == 'none':
+        return -torch.sum(target * torch.log(input), 1)
+    else:
+        raise ValueError
+
+
 class CategoricalNetwork(nn.Module):
     def __init__(self, input_shape, output_shape, features_network, n_atoms,
                  v_min, v_max, n_features, use_cuda, **kwargs):
@@ -32,7 +43,7 @@ class CategoricalNetwork(nn.Module):
                                     gain=nn.init.calculate_gain('linear'))
 
     def forward(self, state, action=None, get_distribution=False):
-        features = self._phi(state, action)
+        features = self._phi(state)
 
         a_p = [F.softmax(self._p[i](features), -1) for i in range(self._n_output)]
         a_p = torch.stack(a_p, dim=1)
@@ -81,6 +92,7 @@ class CategoricalDQN(AbstractDQN):
         params['approximator_params']['n_atoms'] = n_atoms
         params['approximator_params']['v_min'] = v_min
         params['approximator_params']['v_max'] = v_max
+        params['approximator_params']['loss'] = categorical_loss
 
         self._n_atoms = n_atoms
         self._v_min = v_min
@@ -102,16 +114,16 @@ class CategoricalDQN(AbstractDQN):
         self._replay_memory.add(dataset)
         if self._replay_memory.initialized:
             state, action, reward, next_state, absorbing, _ =\
-                self._replay_memory.get(self._batch_size)
+                self._replay_memory.get(self._batch_size())
 
             if self._clip_reward:
                 reward = np.clip(reward, -1, 1)
 
-            q_next = self.target_approximator.predict(next_state)
+            q_next = self.target_approximator.predict(next_state, **self._predict_params)
             a_max = np.argmax(q_next, 1)
             gamma = self.mdp_info.gamma * (1 - absorbing)
             p_next = self.target_approximator.predict(next_state, a_max,
-                                                      get_distribution=True)
+                                                      get_distribution=True, **self._predict_params)
             gamma_z = gamma.reshape(-1, 1) * np.expand_dims(
                 self._a_values, 0).repeat(len(gamma), 0)
             bell_a = (reward.reshape(-1, 1) + gamma_z).clip(self._v_min,
@@ -121,7 +133,7 @@ class CategoricalDQN(AbstractDQN):
             l = np.floor(b).astype(np.int)
             u = np.ceil(b).astype(np.int)
 
-            m = np.zeros((self._batch_size, self._n_atoms))
+            m = np.zeros((self._batch_size.get_value(), self._n_atoms))
             for i in range(self._n_atoms):
                 l[:, i][(u[:, i] > 0) * (l[:, i] == u[:, i])] -= 1
                 u[:, i][(l[:, i] < (self._n_atoms - 1)) * (l[:, i] == u[:, i])] += 1

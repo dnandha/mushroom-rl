@@ -1,7 +1,9 @@
 import numpy as np
 
+from mushroom_rl.core.serialization import Serializable
 
-class MDPInfo:
+
+class MDPInfo(Serializable):
     """
     This class is used to store the information of the environment.
 
@@ -21,6 +23,13 @@ class MDPInfo:
         self.action_space = action_space
         self.gamma = gamma
         self.horizon = horizon
+
+        self._add_save_attr(
+            observation_space='mushroom',
+            action_space='mushroom',
+            gamma='primitive',
+            horizon='primitive'
+        )
 
     @property
     def size(self):
@@ -48,6 +57,61 @@ class Environment(object):
     Basic interface used by any mushroom environment.
 
     """
+
+    @classmethod
+    def register(cls):
+        """
+        Register an environment in the environment list.
+
+        """
+        env_name = cls.__name__
+
+        if env_name not in Environment._registered_envs:
+            Environment._registered_envs[env_name] = cls
+
+    @staticmethod
+    def list_registered():
+        """
+        List registered environments.
+
+        Returns:
+             The list of the registered environments.
+
+        """
+        return list(Environment._registered_envs.keys())
+
+    @staticmethod
+    def make(env_name, *args, **kwargs):
+        """
+        Generate an environment given an environment name and parameters.
+        The environment is created using the generate method, if available. Otherwise, the constructor is used.
+        The generate method has a simpler interface than the constructor, making it easier to generate
+        a standard version of the environment. If the environment name contains a '.' separator, the string
+        is splitted, the first element is used to select the environment and the other elements are passed as
+        positional parameters.
+
+        Args:
+            env_name (str): Name of the environment,
+            *args: positional arguments to be provided to the environment generator;
+            **kwargs: keyword arguments to be provided to the environment generator.
+
+        Returns:
+            An instance of the constructed environment.
+
+        """
+
+        if '.' in env_name:
+            env_data = env_name.split('.')
+            env_name = env_data[0]
+            args = env_data[1:] + list(args)
+
+        env = Environment._registered_envs[env_name]
+
+        if hasattr(env, 'generate'):
+            return env.generate(*args, **kwargs)
+        else:
+            return env(*args, **kwargs)
+
     def __init__(self, mdp_info):
         """
         Constructor.
@@ -136,3 +200,5 @@ class Environment(object):
 
         """
         return np.maximum(min_value, np.minimum(x, max_value))
+
+    _registered_envs = dict()

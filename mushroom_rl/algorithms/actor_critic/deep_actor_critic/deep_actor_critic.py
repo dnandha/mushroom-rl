@@ -1,5 +1,6 @@
-from mushroom_rl.algorithms import Agent
+from mushroom_rl.core import Agent
 from mushroom_rl.utils.torch import update_optimizer_parameters
+
 
 class DeepAC(Agent):
     """
@@ -15,7 +16,8 @@ class DeepAC(Agent):
         Args:
             actor_optimizer (dict): parameters to specify the actor optimizer
                 algorithm;
-            parameters: policy parameters to be optimized.
+            parameters (list): policy parameters to be optimized.
+
         """
         if actor_optimizer is not None:
             if parameters is not None and not isinstance(parameters, list):
@@ -74,15 +76,14 @@ class DeepAC(Agent):
 
     def _update_target(self, online, target):
         for i in range(len(target)):
-            weights = self._tau * online[i].get_weights()
-            weights += (1 - self._tau) * target[i].get_weights()
+            weights = self._tau() * online[i].get_weights()
+            weights += (1 - self._tau.get_value()) * target[i].get_weights()
             target[i].set_weights(weights)
 
     def _update_optimizer_parameters(self, parameters):
         self._parameters = list(parameters)
         if self._optimizer is not None:
             update_optimizer_parameters(self._optimizer, self._parameters)
-
 
     def _post_load(self):
         raise NotImplementedError('DeepAC is an abstract class. Subclasses need'

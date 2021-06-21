@@ -1,6 +1,6 @@
 import numpy as np
 
-from mushroom_rl.algorithms.agent import Agent
+from mushroom_rl.core import Agent
 
 
 class TD(Agent):
@@ -19,12 +19,12 @@ class TD(Agent):
             learning_rate (Parameter): the learning rate.
 
         """
-        self.alpha = learning_rate
+        self._alpha = learning_rate
 
         policy.set_q(approximator)
         self.Q = approximator
 
-        self._add_save_attr(alpha='pickle', Q='mushroom')
+        self._add_save_attr(_alpha='mushroom', Q='mushroom')
 
         super().__init__(mdp_info, policy, features)
 
