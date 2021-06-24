@@ -426,7 +426,7 @@ class SequentialReplayMemory(Serializable):
 
     """
 
-    def __init__(self, initial_size, max_size, unroll_steps,
+    def __init__(self, initial_size, max_size, unroll_steps=1,
                  pad=False, dummy=None):
         """
         Constructor.
@@ -435,12 +435,12 @@ class SequentialReplayMemory(Serializable):
             initial_size (int): initial number of elements in the replay memory
             max_size (int): maximum number of elements that the replay memory
                 can contain.
-            unroll_steps (int): number of serial elements per sample; also the
-                minimum length for an episode to be stored.
-            pad (bool): if True, too short episodes will be padded with padding
-                states to always meet the length of `unroll_steps`.
-            dummy (tuple): A dummy sample to be used to pad episodes when using
-                 `sequential_updates`.
+            unroll_steps (int, 1): number of serial elements per sample; also
+                the minimum length for an episode to be stored.
+            pad (bool, False): if True, too short episodes will be padded with
+                padding states to always meet the length of `unroll_steps`.
+            dummy (tuple, None): A dummy sample to be used to pad episodes when
+                using `sequential_updates`.
 
         """
         self._initial_size = initial_size
@@ -681,8 +681,22 @@ class SequentialReplayMemory(Serializable):
 
 
 class ReplayMemory2(ReplayMemory):
+    """
+    Replay memory, which samples sequences.
+
+    The sequences may be parts of different rollouts but the sub-sequences
+        are parts of real rollout.
+
+    """
 
     def __init__(self, initial_size, max_size, unroll_steps=1):
+        """
+        Constructor.
+
+        Args:
+            unroll_steps (int, 1): number of serial elements per sample; also
+                the minimum length for an episode to be stored.
+        """
         super().__init__(initial_size, max_size)
         self._unroll_steps = unroll_steps
         self._add_save_attr(_unroll_steps='primitive')
