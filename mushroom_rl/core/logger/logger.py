@@ -12,8 +12,7 @@ class Logger(DataLogger, ConsoleLogger):
 
     """
     def __init__(self, log_name='', results_dir='./logs', log_console=False,
-                 use_timestamp=False, append=False, seed=None,
-                 summary_writer=None, **kwargs):
+                 use_timestamp=False, append=False, seed=None, **kwargs):
         """
         Constructor.
 
@@ -51,7 +50,6 @@ class Logger(DataLogger, ConsoleLogger):
 
         suffix = '' if seed is None else '-' + str(seed)
 
-        DataLogger.__init__(self, results_dir, suffix=suffix, append=append,
-                            summary_writer=summary_writer)
+        DataLogger.__init__(self, results_dir, suffix=suffix, append=append)
         ConsoleLogger.__init__(self, log_name, results_dir if log_console else None,
                                suffix=suffix, **kwargs)

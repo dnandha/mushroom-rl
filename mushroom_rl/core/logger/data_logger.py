@@ -11,7 +11,7 @@ class DataLogger(object):
     automatically a log directory, save numpy data array and the current agent.
 
     """
-    def __init__(self, results_dir, suffix='', append=False, summary_writer=None):
+    def __init__(self, results_dir, suffix='', append=False):
         """
         Constructor.
 
@@ -31,8 +31,6 @@ class DataLogger(object):
 
         if append:
             self._load_numpy()
-
-        self.summary_writer = summary_writer
 
     def log_numpy(self, **kwargs):
         """
@@ -54,9 +52,6 @@ class DataLogger(object):
 
             current_data = np.array(self._data_dict[name])
             np.save(path, current_data)
-            if self.summary_writer is not None:
-                self.summary_writer.add_scalar(name, data,
-                                               len(self._data_dict[name]) - 1)
 
     def log_agent(self, agent, epoch=None, full_save=False):
         """
