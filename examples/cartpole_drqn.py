@@ -77,8 +77,7 @@ def experiment():
                   target_update_frequency=1000)
 
     agent = DRQN(mdp.info, pi, TorchApproximator,
-                 approximator_params=approximator_params,
-                 sequential_updates=False, **params)
+                 approximator_params=approximator_params, **params)
 
     # Algorithm
     core = Core(agent, mdp)
