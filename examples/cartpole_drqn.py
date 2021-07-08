@@ -8,7 +8,7 @@ from mushroom_rl.utils.dataset import episodes_length
 from mushroom_rl.utils.parameters import Parameter, LinearParameter
 from mushroom_rl.approximators.parametric import TorchApproximator
 from mushroom_rl.algorithms.value import DRQN
-from mushroom_rl.utils.drqn_utils import *
+from mushroom_rl.utils.memory import *
 
 import matplotlib.pyplot as plt
 
