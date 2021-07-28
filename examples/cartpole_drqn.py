@@ -1,19 +1,21 @@
+import numpy as np
 import pathlib
 import torch.optim as optim
 import torch.nn.functional as F
+from torch import nn
 
 from mushroom_rl.core import Core
-from mushroom_rl.environments import *
+from mushroom_rl.environments import CartPole
 from mushroom_rl.utils.dataset import episodes_length
 from mushroom_rl.utils.parameters import Parameter, LinearParameter
 from mushroom_rl.approximators.parametric import TorchApproximator
 from mushroom_rl.algorithms.value import DRQN
-from mushroom_rl.utils.memory import *
+from mushroom_rl.utils.memory import MemoryEpsGreedy, MemoryQNetwork
 
 import matplotlib.pyplot as plt
 
 
-class Network(MemoryNetwork):
+class Network(MemoryQNetwork):
     def __init__(self, input_shape, output_shape, latent_dims, **_):
         super().__init__()
 
@@ -29,6 +31,9 @@ class Network(MemoryNetwork):
 
         self.float()
 
+    def reset_latent(self):
+        self.latent = None
+
     def memory_pass(self, state):
         q = state[:, :, :self._n_input].float()
         q, self.latent = self._h1(q, self.latent)
@@ -36,9 +41,6 @@ class Network(MemoryNetwork):
 
     def _forward(self, hidden):
         return self._h2(hidden)
-
-    def reset_latent(self):
-        self.latent = None
 
 
 def experiment():
